@@ -36,7 +36,7 @@
     "lint:js": "eslint \"**/*.{js,ts,tsx}\"",
     "lint:ios": "./script/clang-lint.sh",
     "clean": "del-cli example/ios/build lib",
-    "prepare": "husky",
+    "prepare": "husky && bob build",
     "release": "release-it",
     "release:pre": "release-it pre",
     "xcode": "open $(pwd)/example/ios/PencilKitExample.xcworkspace",
