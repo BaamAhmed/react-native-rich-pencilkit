@@ -1,7 +1,7 @@
 {
-  "name": "react-native-pencil-kit",
+  "name": "react-native-rich-pencilkit",
   "version": "1.2.2",
-  "description": "iOS PencilKit for React Native",
+  "description": "Rich iOS PencilKit for React Native",
   "main": "lib/commonjs/index",
   "module": "lib/module/index",
   "types": "lib/typescript/src/index.d.ts",

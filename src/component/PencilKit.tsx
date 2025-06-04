@@ -9,6 +9,10 @@ export type PencilKitProps = {
   backgroundColor?: ColorValue;
   drawingPolicy?: WithDefault<'default' | 'anyinput' | 'pencilonly', 'default'>;
   isOpaque?: boolean;
+  contentSize?: {
+    width: number;
+    height: number;
+  };
 
   onToolPickerVisibilityDidChange?: DirectEventHandler<{}>;
   onToolPickerIsRulerActiveDidChange?: DirectEventHandler<{}>;

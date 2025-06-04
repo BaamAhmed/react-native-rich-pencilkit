@@ -72,6 +72,11 @@ getEmitter(const SharedViewEventEmitter emitter) {
     [_view setBackgroundColor:intToColor(next.backgroundColor)];
   }
 
+  if (prev.contentSize.width != next.contentSize.width || 
+      prev.contentSize.height != next.contentSize.height) {
+      _view.contentSize = CGSizeMake(next.contentSize.width, next.contentSize.height);
+  }
+
   [super updateProps:props oldProps:oldProps];
 }
 
@@ -180,6 +185,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
   [newView setBackgroundColor:v.backgroundColor];
   [newView setDrawingPolicy:v.drawingPolicy];
   [newView setOpaque:v.isOpaque];
+  newView.contentSize = v.contentSize;
   newView.delegate = self;
   [_toolPicker removeObserver:v];
   [_toolPicker addObserver:newView];

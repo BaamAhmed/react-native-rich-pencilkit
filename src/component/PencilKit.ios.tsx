@@ -1,7 +1,7 @@
 import { type ForwardedRef, forwardRef, useImperativeHandle, useRef } from 'react';
 import { findNodeHandle, processColor, Text } from 'react-native';
-import { type PencilKitProps, type PencilKitRef, PencilKitUtil } from 'react-native-pencil-kit';
 
+import { type PencilKitProps, type PencilKitRef, PencilKitUtil } from '../index';
 import NativeRNPencilKitUtil from '../spec/NativeRNPencilKitUtil';
 import NativePencilKitView, { Commands } from '../spec/RNPencilKitNativeComponent';
 
@@ -13,6 +13,7 @@ function PencilKitComponent(
     drawingPolicy = 'default',
     backgroundColor,
     isOpaque = true,
+    contentSize,
     onToolPickerFramesObscuredDidChange,
     onToolPickerIsRulerActiveDidChange,
     onToolPickerSelectedToolDidChange,
@@ -96,6 +97,7 @@ function PencilKitComponent(
         drawingPolicy,
         backgroundColor: processColor(backgroundColor) as number,
         isOpaque,
+        contentSize,
         onToolPickerFramesObscuredDidChange,
         onToolPickerIsRulerActiveDidChange,
         onToolPickerSelectedToolDidChange,

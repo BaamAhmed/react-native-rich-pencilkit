@@ -17,6 +17,10 @@ export interface NativeProps extends ViewProps {
   backgroundColor: Int32;
   drawingPolicy?: WithDefault<'default' | 'anyinput' | 'pencilonly', 'default'>;
   isOpaque?: boolean;
+  contentSize?: {
+    width: Double;
+    height: Double;
+  };
 
   onToolPickerVisibilityDidChange?: DirectEventHandler<{}>;
   onToolPickerIsRulerActiveDidChange?: DirectEventHandler<{}>;

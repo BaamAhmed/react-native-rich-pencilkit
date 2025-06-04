@@ -2,7 +2,7 @@
   "compilerOptions": {
     "rootDir": ".",
     "paths": {
-      "react-native-pencil-kit": ["./src/index"]
+      "react-native-rich-pencilkit": ["./src/index"]
     },
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,
