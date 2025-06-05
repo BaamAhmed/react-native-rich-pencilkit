@@ -14,6 +14,25 @@ export type PencilKitProps = {
     height: number;
   };
 
+  // zoom/pan props
+  minimumZoomScale?: number;
+  maximumZoomScale?: number;
+  contentAlignmentPoint?: {
+    x: number;
+    y: number;
+  };
+  contentInset?: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
+
+  // drawingArea props
+  contentAreaBorderWidth?: number;
+  contentAreaBorderColor?: ColorValue;
+  contentAreaBackgroundColor?: ColorValue;
+
   onToolPickerVisibilityDidChange?: DirectEventHandler<{}>;
   onToolPickerIsRulerActiveDidChange?: DirectEventHandler<{}>;
   onToolPickerFramesObscuredDidChange?: DirectEventHandler<{}>;
@@ -22,6 +41,7 @@ export type PencilKitProps = {
   onCanvasViewDidEndUsingTool?: DirectEventHandler<{}>;
   onCanvasViewDrawingDidChange?: DirectEventHandler<{}>;
   onCanvasViewDidFinishRendering?: DirectEventHandler<{}>;
+  onPencilDoubleTap?: DirectEventHandler<{}>;
 } & ViewProps;
 export type PencilKitTool =
   | 'pen'
@@ -41,6 +61,7 @@ export type PencilKitRef = {
   redo: () => void;
   undo: () => void;
   setTool: (params: { toolType: PencilKitTool; width?: number; color?: ColorValue }) => void;
+  getTool: () => void;
   saveDrawing: (path: string) => Promise<string>;
   loadDrawing: (path: string) => Promise<void>;
   getBase64Data: () => Promise<string>;
@@ -48,7 +69,7 @@ export type PencilKitRef = {
   getBase64JpegData: (params?: { scale?: number; compression?: number }) => Promise<string>;
   loadBase64Data: (base64: string) => Promise<void>;
 };
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export const PencilKit = forwardRef((props: PencilKitProps, ref: ForwardedRef<PencilKitRef>) => {
+
+export const PencilKit = forwardRef((_props: PencilKitProps, _ref: ForwardedRef<PencilKitRef>) => {
   return <Text>{"This platform doesn't support pencilkit"}</Text>;
 });

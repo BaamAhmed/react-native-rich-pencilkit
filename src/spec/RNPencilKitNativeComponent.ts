@@ -22,6 +22,22 @@ export interface NativeProps extends ViewProps {
     height: Double;
   };
 
+  minimumZoomScale?: Double;
+  maximumZoomScale?: Double;
+  contentAlignmentPoint?: {
+    x: Double;
+    y: Double;
+  };
+  contentInset?: {
+    top: Double;
+    right: Double;
+    bottom: Double;
+    left: Double;
+  };
+  contentAreaBorderWidth?: Double;
+  contentAreaBorderColor?: Int32;
+  contentAreaBackgroundColor?: Int32;
+
   onToolPickerVisibilityDidChange?: DirectEventHandler<{}>;
   onToolPickerIsRulerActiveDidChange?: DirectEventHandler<{}>;
   onToolPickerFramesObscuredDidChange?: DirectEventHandler<{}>;
@@ -30,6 +46,7 @@ export interface NativeProps extends ViewProps {
   onCanvasViewDidEndUsingTool?: DirectEventHandler<{}>;
   onCanvasViewDrawingDidChange?: DirectEventHandler<{}>;
   onCanvasViewDidFinishRendering?: DirectEventHandler<{}>;
+  onPencilDoubleTap?: DirectEventHandler<{}>;
 }
 
 export interface PencilKitCommands {
@@ -44,9 +61,18 @@ export interface PencilKitCommands {
     width?: Double,
     color?: Int32,
   ) => void;
+  getTool: (ref: React.ElementRef<ComponentType>) => void;
 }
 
 export const Commands: PencilKitCommands = codegenNativeCommands<PencilKitCommands>({
-  supportedCommands: ['clear', 'showToolPicker', 'hideToolPicker', 'redo', 'undo', 'setTool'],
+  supportedCommands: [
+    'clear',
+    'showToolPicker',
+    'hideToolPicker',
+    'redo',
+    'undo',
+    'setTool',
+    'getTool',
+  ],
 });
 export default codegenNativeComponent<NativeProps>('RNPencilKit');
