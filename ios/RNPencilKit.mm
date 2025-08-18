@@ -21,7 +21,6 @@ getEmitter(const SharedViewEventEmitter emitter) {
 
 @implementation RNPencilKit {
   PKCanvasView* _Nonnull _view;
-  CAShapeLayer* _borderLayer;
   PKToolPicker* _Nullable _toolPicker;
 }
 
@@ -30,12 +29,19 @@ getEmitter(const SharedViewEventEmitter emitter) {
     static const auto defaultProps = std::make_shared<const RNPencilKitProps>();
     _props = defaultProps;
     _view = [[PKCanvasView alloc] initWithFrame:frame];
-    _view.minimumZoomScale = 0.2;
-    _view.maximumZoomScale = 4.0;
-
+    // _view.minimumZoomScale = 0.2;
+    // _view.maximumZoomScale = 4.0;
     _view.backgroundColor = [UIColor clearColor];
-    _view.contentAlignmentPoint = CGPointMake(0.5, 0.5);
-    _view.contentInset = UIEdgeInsetsMake(30.0, 1.0, 1.0, 1.0);
+
+    // Initialize with viewport-based content size and insets
+    CGSize viewportSize = frame.size;
+    CGSize initialContentSize = CGSizeMake(viewportSize.width * 2, viewportSize.height * 2);
+    _view.contentSize = initialContentSize;
+
+    // Center the viewport in the initial content size
+    CGFloat leftInset = (initialContentSize.width - viewportSize.width) / 2;
+    CGFloat topInset = (initialContentSize.height - viewportSize.height) / 2;
+    _view.contentInset = UIEdgeInsetsMake(-topInset, -leftInset, -topInset, -leftInset);
 
     _view.delegate = self;
     _toolPicker = [[PKToolPicker alloc] init];
@@ -61,12 +67,33 @@ getEmitter(const SharedViewEventEmitter emitter) {
 }
 
 - (void)scrollViewDidZoom:(UIScrollView*)scrollView {
-  CGFloat z = scrollView.zoomScale;
+  // No longer needed since we removed border layer
+}
 
-  [CATransaction begin];
-  [CATransaction setDisableActions:YES]; // ← no implicit animation
-  _borderLayer.affineTransform = CGAffineTransformMakeScale(z, z);
-  [CATransaction commit];
+- (UIImage*)loadImageFromPath:(NSString*)imagePath {
+  UIImage* image = nil;
+
+  // Check if it's a base64 encoded image
+  if ([imagePath hasPrefix:@"data:image/"]) {
+    NSRange commaRange = [imagePath rangeOfString:@","];
+    if (commaRange.location != NSNotFound) {
+      NSString* base64String = [imagePath substringFromIndex:commaRange.location + 1];
+      NSData* imageData =
+          [[NSData alloc] initWithBase64EncodedString:base64String
+                                              options:NSDataBase64DecodingIgnoreUnknownCharacters];
+      if (imageData) {
+        image = [UIImage imageWithData:imageData];
+      }
+    }
+  } else {
+    // Try loading as a file path or resource name
+    image = [UIImage imageNamed:imagePath];
+    if (!image) {
+      image = [UIImage imageWithContentsOfFile:imagePath];
+    }
+  }
+
+  return image;
 }
 
 - (void)updateProps:(Props::Shared const&)props oldProps:(Props::Shared const&)oldProps {
@@ -96,83 +123,15 @@ getEmitter(const SharedViewEventEmitter emitter) {
     [_view setBackgroundColor:intToColor(next.backgroundColor)];
   }
 
-  if (prev.minimumZoomScale != next.minimumZoomScale) {
-    _view.minimumZoomScale = next.minimumZoomScale;
-  }
+  // if (prev.minimumZoomScale != next.minimumZoomScale) {
+  //   _view.minimumZoomScale = next.minimumZoomScale;
+  // }
 
-  if (prev.maximumZoomScale != next.maximumZoomScale) {
-    _view.maximumZoomScale = next.maximumZoomScale;
-  }
+  // if (prev.maximumZoomScale != next.maximumZoomScale) {
+  //   _view.maximumZoomScale = next.maximumZoomScale;
+  // }
 
-  if (prev.contentAlignmentPoint.x != next.contentAlignmentPoint.x ||
-      prev.contentAlignmentPoint.y != next.contentAlignmentPoint.y) {
-    CGPoint newAlignmentPoint =
-        CGPointMake(next.contentAlignmentPoint.x, next.contentAlignmentPoint.y);
-    _view.contentAlignmentPoint = newAlignmentPoint;
-  }
-
-  if (prev.contentInset.top != next.contentInset.top ||
-      prev.contentInset.right != next.contentInset.right ||
-      prev.contentInset.bottom != next.contentInset.bottom ||
-      prev.contentInset.left != next.contentInset.left) {
-    UIEdgeInsets newInset = UIEdgeInsetsMake(next.contentInset.top, next.contentInset.left,
-                                             next.contentInset.bottom, next.contentInset.right);
-    _view.contentInset = newInset;
-  }
-
-  if (prev.contentAreaBorderWidth != next.contentAreaBorderWidth) {
-    if (_borderLayer) {
-      _borderLayer.lineWidth = next.contentAreaBorderWidth;
-    }
-  }
-
-  if (prev.contentAreaBorderColor ^ next.contentAreaBorderColor) {
-    if (_borderLayer) {
-      _borderLayer.strokeColor = intToColor(next.contentAreaBorderColor).CGColor;
-    }
-  }
-
-  if (prev.contentAreaBackgroundColor ^ next.contentAreaBackgroundColor) {
-    _borderLayer.fillColor = intToColor(next.contentAreaBackgroundColor).CGColor;
-  }
-
-  if (prev.contentSize.width != next.contentSize.width ||
-      prev.contentSize.height != next.contentSize.height) {
-    CGSize newSize = CGSizeMake(next.contentSize.width, next.contentSize.height);
-    _view.contentSize = newSize;
-
-    // Update or create border layer for new size
-    if (_borderLayer) {
-      CGRect borderRect = CGRectMake(0, 0, newSize.width, newSize.height);
-      UIBezierPath* borderPath = [UIBezierPath bezierPathWithRect:borderRect];
-      _borderLayer.path = borderPath.CGPath;
-    } else {
-      _borderLayer = [CAShapeLayer layer];
-      CGRect borderRect = CGRectMake(0, 0, newSize.width, newSize.height);
-      UIBezierPath* borderPath = [UIBezierPath bezierPathWithRect:borderRect];
-      _borderLayer.path = borderPath.CGPath;
-      _borderLayer.strokeColor = next.contentAreaBorderColor
-                                     ? intToColor(next.contentAreaBorderColor).CGColor
-                                     : [UIColor blackColor].CGColor;
-      _borderLayer.fillColor = [UIColor clearColor].CGColor;
-      _borderLayer.lineWidth = next.contentAreaBorderWidth;
-      _borderLayer.zPosition = -1;
-
-      [_view.layer addSublayer:_borderLayer];
-    }
-  }
-
-  if (prev.contentAreaBorderWidth != next.contentAreaBorderWidth) {
-    _borderLayer.lineWidth = next.contentAreaBorderWidth;
-  }
-
-  if (prev.contentAreaBorderColor ^ next.contentAreaBorderColor) {
-    _borderLayer.strokeColor = intToColor(next.contentAreaBorderColor).CGColor;
-  }
-
-  if (prev.contentAreaBackgroundColor ^ next.contentAreaBackgroundColor) {
-    _borderLayer.fillColor = intToColor(next.contentAreaBackgroundColor).CGColor;
-  }
+  // All content size, insets, and styling are now handled by infinite scrolling implementation
 
   [super updateProps:props oldProps:oldProps];
 }
@@ -197,6 +156,16 @@ getEmitter(const SharedViewEventEmitter emitter) {
 
 - (NSString*)getBase64Data {
   return [_view.drawing.dataRepresentation base64EncodedStringWithOptions:0];
+}
+
+- (NSDictionary*)getDrawingBounds {
+  CGRect bounds = _view.drawing.bounds;
+  return @{
+    @"x" : @(bounds.origin.x),
+    @"y" : @(bounds.origin.y),
+    @"width" : @(bounds.size.width),
+    @"height" : @(bounds.size.height)
+  };
 }
 
 - (NSString*)getBase64PngData:(double)scale {
@@ -415,6 +384,94 @@ getEmitter(const SharedViewEventEmitter emitter) {
 }
 - (void)canvasViewDrawingDidChange:(PKCanvasView*)canvasView {
   if (auto e = getEmitter(_eventEmitter)) {
+    const int THRESH = 200;
+
+    /**
+     Implementation of infinite scrolling canvas:
+     1. Calculate viewport-based margins
+     2. Adjust content insets based on drawing bounds
+     3. Handle both empty and non-empty drawing cases
+     */
+
+    PKDrawing* currentDrawing = canvasView.drawing;
+    CGRect viewportBounds = _view.bounds;
+    CGRect drawingBounds = currentDrawing.bounds;
+    CGFloat zoomScale = _view.zoomScale;
+
+    // Create viewport-sized margins
+    UIEdgeInsets viewportMargins =
+        UIEdgeInsetsMake(-viewportBounds.size.height, -viewportBounds.size.width,
+                         -viewportBounds.size.height, -viewportBounds.size.width);
+
+    if (CGSizeEqualToSize(drawingBounds.size, CGSizeZero)) {
+      // No drawing case - center the viewport
+      CGFloat leftInset = (_view.contentSize.width - viewportBounds.size.width) / 2;
+      CGFloat topInset = (_view.contentSize.height - viewportBounds.size.height) / 2;
+
+      _view.contentInset = UIEdgeInsetsMake(-topInset, -leftInset, -topInset, -leftInset);
+    } else {
+      // Existing drawing case
+      CGRect realContentBounds = CGRectInset(drawingBounds, viewportMargins.left / zoomScale,
+                                             viewportMargins.top / zoomScale);
+
+      // Union with viewport to include visible area
+      CGRect finalContentBounds =
+          CGRectUnion(realContentBounds, CGRectMake(0, 0, viewportBounds.size.width / zoomScale,
+                                                    viewportBounds.size.height / zoomScale));
+
+      // Track if we need to shift the drawing
+      CGFloat drawingShiftX = 0;
+      CGFloat drawingShiftY = 0;
+
+      // Check if we need to expand left or top
+      if (finalContentBounds.origin.x < 0) {
+        drawingShiftX = -finalContentBounds.origin.x;
+        finalContentBounds.size.width += drawingShiftX;
+        finalContentBounds.origin.x = 0;
+      }
+      if (finalContentBounds.origin.y < 0) {
+        drawingShiftY = -finalContentBounds.origin.y;
+        finalContentBounds.size.height += drawingShiftY;
+        finalContentBounds.origin.y = 0;
+      }
+
+      // Calculate new content size to accommodate the drawing
+      CGSize newContentSize =
+          CGSizeMake(MAX(_view.contentSize.width,
+                         finalContentBounds.size.width * zoomScale + viewportBounds.size.width),
+                     MAX(_view.contentSize.height,
+                         finalContentBounds.size.height * zoomScale + viewportBounds.size.height));
+
+      // If we need to shift the drawing, do it before changing content size
+      if (drawingShiftX > 0 || drawingShiftY > 0) {
+        // Store current content offset before shifting
+        CGPoint currentOffset = _view.contentOffset;
+
+        // Shift the drawing
+        PKDrawing* shiftedDrawing = [currentDrawing
+            drawingByApplyingTransform:CGAffineTransformMakeTranslation(drawingShiftX,
+                                                                        drawingShiftY)];
+        [_view setDrawing:shiftedDrawing];
+
+        // Adjust content offset by the same amount we shifted the drawing
+        CGPoint newOffset = CGPointMake(currentOffset.x + (drawingShiftX * zoomScale),
+                                        currentOffset.y + (drawingShiftY * zoomScale));
+        _view.contentOffset = newOffset;
+      }
+
+      // Set new content size if it changed
+      if (!CGSizeEqualToSize(_view.contentSize, newContentSize)) {
+        _view.contentSize = newContentSize;
+      }
+
+      // Update content insets to allow scrolling only within the useful content area
+      _view.contentInset =
+          UIEdgeInsetsMake(0, // Top inset starts at 0 since we shifted the drawing
+                           0, // Left inset starts at 0 since we shifted the drawing
+                           -(newContentSize.height - finalContentBounds.size.height * zoomScale),
+                           -(newContentSize.width - finalContentBounds.size.width * zoomScale));
+    }
+
     e->onCanvasViewDrawingDidChange({});
   }
 }
