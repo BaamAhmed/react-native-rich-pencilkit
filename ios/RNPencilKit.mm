@@ -1,4 +1,5 @@
 #import "RNPencilKit.h"
+#import <React/RCTLog.h>
 
 #import <react/renderer/components/RNPencilKitSpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNPencilKitSpec/EventEmitters.h>
@@ -15,13 +16,15 @@ getEmitter(const SharedViewEventEmitter emitter) {
 }
 
 @interface RNPencilKit () <RCTRNPencilKitViewProtocol, PKCanvasViewDelegate, PKToolPickerObserver,
-                           UIPencilInteractionDelegate>
+                           UIPencilInteractionDelegate, UIScrollViewDelegate>
 
 @end
 
 @implementation RNPencilKit {
   PKCanvasView* _Nonnull _view;
   PKToolPicker* _Nullable _toolPicker;
+  UILabel* _Nullable _boundsLabel;
+  UIEdgeInsets _lastEdgeInsets;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -29,19 +32,13 @@ getEmitter(const SharedViewEventEmitter emitter) {
     static const auto defaultProps = std::make_shared<const RNPencilKitProps>();
     _props = defaultProps;
     _view = [[PKCanvasView alloc] initWithFrame:frame];
-    // _view.minimumZoomScale = 0.2;
-    // _view.maximumZoomScale = 4.0;
     _view.backgroundColor = [UIColor clearColor];
+    _view.minimumZoomScale = 0.2;
+    _view.maximumZoomScale = 4.0;
+    _view.contentSize = CGSizeMake(10000, 10000);
 
-    // Initialize with viewport-based content size and insets
-    CGSize viewportSize = frame.size;
-    CGSize initialContentSize = CGSizeMake(viewportSize.width * 2, viewportSize.height * 2);
-    _view.contentSize = initialContentSize;
-
-    // Center the viewport in the initial content size
-    CGFloat leftInset = (initialContentSize.width - viewportSize.width) / 2;
-    CGFloat topInset = (initialContentSize.height - viewportSize.height) / 2;
-    _view.contentInset = UIEdgeInsetsMake(-topInset, -leftInset, -topInset, -leftInset);
+    // Initialize content inset using our helper method
+    [self updateContentInset];
 
     _view.delegate = self;
     _toolPicker = [[PKToolPicker alloc] init];
@@ -56,6 +53,33 @@ getEmitter(const SharedViewEventEmitter emitter) {
       pencilInteraction.delegate = self;
       [_view addInteraction:pencilInteraction];
     }
+
+    // ── Initialize bounds display label ──
+    _boundsLabel = [[UILabel alloc] init];
+    _boundsLabel.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.7];
+    _boundsLabel.textColor = [UIColor whiteColor];
+    _boundsLabel.font = [UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightRegular];
+    _boundsLabel.numberOfLines = 0;
+    _boundsLabel.textAlignment = NSTextAlignmentLeft;
+    _boundsLabel.layer.cornerRadius = 4;
+    _boundsLabel.clipsToBounds = YES;
+    _boundsLabel.translatesAutoresizingMaskIntoConstraints = NO;
+
+    // Add padding by creating a container view or using insets
+    _boundsLabel.layer.masksToBounds = YES;
+    [self addSubview:_boundsLabel];
+
+    // Position label at top-left corner with padding
+    [NSLayoutConstraint activateConstraints:@[
+      [_boundsLabel.topAnchor constraintEqualToAnchor:self.safeAreaLayoutGuide.topAnchor
+                                             constant:8],
+      [_boundsLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:8],
+      [_boundsLabel.widthAnchor constraintLessThanOrEqualToConstant:300],
+      [_boundsLabel.heightAnchor constraintGreaterThanOrEqualToConstant:70]
+    ]];
+
+    // Initial bounds update
+    [self updateBoundsDisplay];
   }
 
   return self;
@@ -66,8 +90,65 @@ getEmitter(const SharedViewEventEmitter emitter) {
   [_toolPicker removeObserver:self];
 }
 
+- (void)scrollViewWillBeginZooming:(UIScrollView*)scrollView withView:(UIView*)view {
+  // Clear content inset when zooming begins to avoid interference
+  _lastEdgeInsets = (UIEdgeInsets){.top = _view.contentInset.top / _view.zoomScale,
+                                   .left = _view.contentInset.left / _view.zoomScale,
+                                   .bottom = _view.contentInset.bottom / _view.zoomScale,
+                                   .right = _view.contentInset.right / _view.zoomScale};
+  _view.contentInset = UIEdgeInsetsZero;
+}
+
+- (void)scrollViewDidEndZooming:(UIScrollView*)scrollView
+                       withView:(UIView*)view
+                        atScale:(CGFloat)scale {
+  // Restore content inset when zooming ends
+  // [self updateContentInset];
+  _view.contentInset = (UIEdgeInsets){.top = _lastEdgeInsets.top * _view.zoomScale,
+                                      .left = _lastEdgeInsets.left * _view.zoomScale,
+                                      .bottom = _lastEdgeInsets.bottom * _view.zoomScale,
+                                      .right = _lastEdgeInsets.right * _view.zoomScale};
+  [self updateBoundsDisplay];
+}
+
 - (void)scrollViewDidZoom:(UIScrollView*)scrollView {
   // No longer needed since we removed border layer
+  [self updateBoundsDisplay];
+}
+
+- (void)scrollViewDidScroll:(UIScrollView*)scrollView {
+  [self updateBoundsDisplay];
+}
+
+- (void)updateBoundsDisplay {
+  if (!_boundsLabel || !_view) {
+    return;
+  }
+
+  CGRect viewBounds = _view.bounds;
+  CGRect drawingBounds = _view.drawing.bounds;
+  UIEdgeInsets contentInset = _view.contentInset;
+  CGFloat zoomScale = _view.zoomScale;
+
+  NSString* boundsText = [NSString
+      stringWithFormat:@"  View Bounds:\n"
+                       @"  x: %.1f, y: %.1f\n"
+                       @"  w: %.1f, h: %.1f\n\n"
+                       @"  Drawing Bounds:\n"
+                       @"  x: %.1f, y: %.1f\n"
+                       @"  w: %.1f, h: %.1f\n\n"
+                       @"  Content Inset:\n"
+                       @"  top: %.1f, left: %.1f\n"
+                       @"  bottom: %.1f, right: %.1f\n\n"
+                       @"  Zoom Scale: %.2f  ",
+                       viewBounds.origin.x, viewBounds.origin.y, viewBounds.size.width,
+                       viewBounds.size.height, drawingBounds.origin.x, drawingBounds.origin.y,
+                       drawingBounds.size.width, drawingBounds.size.height, contentInset.top,
+                       contentInset.left, contentInset.bottom, contentInset.right, zoomScale];
+
+  dispatch_async(dispatch_get_main_queue(), ^{
+    self->_boundsLabel.text = boundsText;
+  });
 }
 
 - (UIImage*)loadImageFromPath:(NSString*)imagePath {
@@ -123,17 +204,129 @@ getEmitter(const SharedViewEventEmitter emitter) {
     [_view setBackgroundColor:intToColor(next.backgroundColor)];
   }
 
-  // if (prev.minimumZoomScale != next.minimumZoomScale) {
-  //   _view.minimumZoomScale = next.minimumZoomScale;
-  // }
-
-  // if (prev.maximumZoomScale != next.maximumZoomScale) {
-  //   _view.maximumZoomScale = next.maximumZoomScale;
-  // }
-
   // All content size, insets, and styling are now handled by infinite scrolling implementation
 
   [super updateProps:props oldProps:oldProps];
+}
+
+- (void)layoutSubviews {
+  [super layoutSubviews];
+  [self updateBoundsDisplay];
+}
+
+// - (void)updateContentInset {
+//     CGRect viewportBounds = _view.bounds;
+//     // Create viewport-sized margins
+//     UIEdgeInsets viewportMargins = UIEdgeInsetsMake(
+//         -viewportBounds.size.height,
+//         -viewportBounds.size.width,
+//         -viewportBounds.size.height,
+//         -viewportBounds.size.width
+//     );
+
+//     // NSLog(@"[RNPencilKit] viewportMargins: %@",
+//     //           NSStringFromUIEdgeInsets(viewportMargins));
+//     NSLog(@"[RNPencilKit] _view.bounds: %@",
+//               NSStringFromCGRect(_view.bounds));
+//     // NSLog(@"[RNPencilKit] _view.zoomScale: %f",
+//     //           _view.zoomScale);
+
+//     if (CGSizeEqualToSize(_view.drawing.bounds.size, CGSizeZero)) {
+//         // No drawing case - center the viewport
+//         CGFloat leftInset = (_view.contentSize.width - CGRectGetWidth(viewportBounds)) / 2;
+//         CGFloat topInset = (_view.contentSize.height - CGRectGetHeight(viewportBounds)) / 2;
+
+//         _view.contentInset = UIEdgeInsetsMake(
+//             -topInset,
+//             -leftInset,
+//             -topInset,
+//             -leftInset
+//         );
+//     } else {
+//         // Existing drawing case
+
+//         CGRect realContentBounds = CGRectInset(_view.drawing.bounds, viewportMargins.left,
+//         viewportMargins.top);
+
+//         // Union with viewport to include visible area
+//         CGRect finalContentBounds = CGRectUnion(realContentBounds, viewportBounds);
+
+//         _view.contentInset = UIEdgeInsetsMake(
+//           -finalContentBounds.origin.y,
+//           -finalContentBounds.origin.x,
+//           -(_view.contentSize.height - CGRectGetMaxY(finalContentBounds)),
+//           -(_view.contentSize.width - CGRectGetMaxX(finalContentBounds))
+//         );
+//         // NSLog(@"[RNPencilKit] _view.drawing.bounds: %@",
+//         NSStringFromCGRect(_view.drawing.bounds));
+//         // NSLog(@"[RNPencilKit] realContentBounds: %@", NSStringFromCGRect(realContentBounds));
+//         // NSLog(@"[RNPencilKit] finalContentBounds: %@",
+//         NSStringFromCGRect(finalContentBounds));
+//         // NSLog(@"[RNPencilKit] _view.contentInset: %@",
+//         NSStringFromUIEdgeInsets(_view.contentInset));
+//     }
+
+//     // NSLog(@"[RNPencilKit] =========");
+// }
+
+- (void)updateContentInset {
+  const CGFloat z = MAX(_view.zoomScale, 0.0001);
+
+  // Visible size in content coordinates
+  const CGSize viewportInContent = (CGSize){_view.bounds.size.width, _view.bounds.size.height};
+
+  // ✅ Correct: visible origin must include contentInset
+  const CGPoint visibleOriginInContent = (CGPoint){_view.bounds.origin.x, _view.bounds.origin.y};
+
+  const CGRect visible = (CGRect){visibleOriginInContent, viewportInContent};
+
+  if (CGSizeEqualToSize(_view.drawing.bounds.size, CGSizeZero)) {
+    // Center an empty canvas using viewportInContent, not raw bounds
+    const CGFloat leftInset = (_view.contentSize.width - viewportInContent.width) / 2.0;
+    const CGFloat topInset = (_view.contentSize.height - viewportInContent.height) / 2.0;
+
+    _view.contentInset = (UIEdgeInsets){
+        .top = -topInset,
+        .left = -leftInset,
+        .bottom = -topInset,
+        .right = -leftInset,
+    };
+    return;
+  }
+
+  const CGRect drawing =
+      (CGRect){.origin = (CGPoint){_view.drawing.bounds.origin.x * _view.zoomScale,
+                                   _view.drawing.bounds.origin.y * _view.zoomScale},
+               .size = (CGSize){_view.drawing.bounds.size.width * _view.zoomScale,
+                                _view.drawing.bounds.size.height * _view.zoomScale}};
+
+  // One-viewport padding (in content coordinates)
+  const CGFloat padX = viewportInContent.width;
+  const CGFloat padY = viewportInContent.height;
+
+  // Expand the ink bounds symmetrically
+  const CGRect expanded = CGRectInset(drawing, -padX, -padY);
+
+  // Include what's currently on screen (correctly measured)
+  CGRect finalContentBounds = CGRectUnion(expanded, visible);
+
+  // (Optional) Keep bounds inside contentSize to avoid pathological insets
+  finalContentBounds.origin.x = MAX(0, finalContentBounds.origin.x);
+  finalContentBounds.origin.y = MAX(0, finalContentBounds.origin.y);
+  finalContentBounds.size.width =
+      MIN(finalContentBounds.size.width, _view.contentSize.width - finalContentBounds.origin.x);
+  finalContentBounds.size.height =
+      MIN(finalContentBounds.size.height, _view.contentSize.height - finalContentBounds.origin.y);
+
+  _view.contentInset = (UIEdgeInsets){
+      .top = -finalContentBounds.origin.y,
+      .left = -finalContentBounds.origin.x,
+      .bottom = -(_view.contentSize.height - CGRectGetMaxY(finalContentBounds)),
+      .right = -(_view.contentSize.width - CGRectGetMaxX(finalContentBounds)),
+  };
+
+  // Update bounds display after content inset changes
+  [self updateBoundsDisplay];
 }
 
 - (void)clear {
@@ -384,94 +577,8 @@ getEmitter(const SharedViewEventEmitter emitter) {
 }
 - (void)canvasViewDrawingDidChange:(PKCanvasView*)canvasView {
   if (auto e = getEmitter(_eventEmitter)) {
-    const int THRESH = 200;
-
-    /**
-     Implementation of infinite scrolling canvas:
-     1. Calculate viewport-based margins
-     2. Adjust content insets based on drawing bounds
-     3. Handle both empty and non-empty drawing cases
-     */
-
-    PKDrawing* currentDrawing = canvasView.drawing;
-    CGRect viewportBounds = _view.bounds;
-    CGRect drawingBounds = currentDrawing.bounds;
-    CGFloat zoomScale = _view.zoomScale;
-
-    // Create viewport-sized margins
-    UIEdgeInsets viewportMargins =
-        UIEdgeInsetsMake(-viewportBounds.size.height, -viewportBounds.size.width,
-                         -viewportBounds.size.height, -viewportBounds.size.width);
-
-    if (CGSizeEqualToSize(drawingBounds.size, CGSizeZero)) {
-      // No drawing case - center the viewport
-      CGFloat leftInset = (_view.contentSize.width - viewportBounds.size.width) / 2;
-      CGFloat topInset = (_view.contentSize.height - viewportBounds.size.height) / 2;
-
-      _view.contentInset = UIEdgeInsetsMake(-topInset, -leftInset, -topInset, -leftInset);
-    } else {
-      // Existing drawing case
-      CGRect realContentBounds = CGRectInset(drawingBounds, viewportMargins.left / zoomScale,
-                                             viewportMargins.top / zoomScale);
-
-      // Union with viewport to include visible area
-      CGRect finalContentBounds =
-          CGRectUnion(realContentBounds, CGRectMake(0, 0, viewportBounds.size.width / zoomScale,
-                                                    viewportBounds.size.height / zoomScale));
-
-      // Track if we need to shift the drawing
-      CGFloat drawingShiftX = 0;
-      CGFloat drawingShiftY = 0;
-
-      // Check if we need to expand left or top
-      if (finalContentBounds.origin.x < 0) {
-        drawingShiftX = -finalContentBounds.origin.x;
-        finalContentBounds.size.width += drawingShiftX;
-        finalContentBounds.origin.x = 0;
-      }
-      if (finalContentBounds.origin.y < 0) {
-        drawingShiftY = -finalContentBounds.origin.y;
-        finalContentBounds.size.height += drawingShiftY;
-        finalContentBounds.origin.y = 0;
-      }
-
-      // Calculate new content size to accommodate the drawing
-      CGSize newContentSize =
-          CGSizeMake(MAX(_view.contentSize.width,
-                         finalContentBounds.size.width * zoomScale + viewportBounds.size.width),
-                     MAX(_view.contentSize.height,
-                         finalContentBounds.size.height * zoomScale + viewportBounds.size.height));
-
-      // If we need to shift the drawing, do it before changing content size
-      if (drawingShiftX > 0 || drawingShiftY > 0) {
-        // Store current content offset before shifting
-        CGPoint currentOffset = _view.contentOffset;
-
-        // Shift the drawing
-        PKDrawing* shiftedDrawing = [currentDrawing
-            drawingByApplyingTransform:CGAffineTransformMakeTranslation(drawingShiftX,
-                                                                        drawingShiftY)];
-        [_view setDrawing:shiftedDrawing];
-
-        // Adjust content offset by the same amount we shifted the drawing
-        CGPoint newOffset = CGPointMake(currentOffset.x + (drawingShiftX * zoomScale),
-                                        currentOffset.y + (drawingShiftY * zoomScale));
-        _view.contentOffset = newOffset;
-      }
-
-      // Set new content size if it changed
-      if (!CGSizeEqualToSize(_view.contentSize, newContentSize)) {
-        _view.contentSize = newContentSize;
-      }
-
-      // Update content insets to allow scrolling only within the useful content area
-      _view.contentInset =
-          UIEdgeInsetsMake(0, // Top inset starts at 0 since we shifted the drawing
-                           0, // Left inset starts at 0 since we shifted the drawing
-                           -(newContentSize.height - finalContentBounds.size.height * zoomScale),
-                           -(newContentSize.width - finalContentBounds.size.width * zoomScale));
-    }
-
+    [self updateContentInset];
+    [self updateBoundsDisplay];
     e->onCanvasViewDrawingDidChange({});
   }
 }
