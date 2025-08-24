@@ -25,6 +25,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
   PKToolPicker* _Nullable _toolPicker;
   UILabel* _Nullable _boundsLabel;
   UIEdgeInsets _lastEdgeInsets;
+  BOOL _allowInfiniteScroll;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -33,12 +34,6 @@ getEmitter(const SharedViewEventEmitter emitter) {
     _props = defaultProps;
     _view = [[PKCanvasView alloc] initWithFrame:frame];
     _view.backgroundColor = [UIColor clearColor];
-    _view.minimumZoomScale = 0.2;
-    _view.maximumZoomScale = 4.0;
-    _view.contentSize = CGSizeMake(10000, 10000);
-
-    // Initialize content inset using our helper method
-    [self updateContentInset];
 
     _view.delegate = self;
     _toolPicker = [[PKToolPicker alloc] init];
@@ -53,33 +48,6 @@ getEmitter(const SharedViewEventEmitter emitter) {
       pencilInteraction.delegate = self;
       [_view addInteraction:pencilInteraction];
     }
-
-    // ── Initialize bounds display label ──
-    _boundsLabel = [[UILabel alloc] init];
-    _boundsLabel.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.7];
-    _boundsLabel.textColor = [UIColor whiteColor];
-    _boundsLabel.font = [UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightRegular];
-    _boundsLabel.numberOfLines = 0;
-    _boundsLabel.textAlignment = NSTextAlignmentLeft;
-    _boundsLabel.layer.cornerRadius = 4;
-    _boundsLabel.clipsToBounds = YES;
-    _boundsLabel.translatesAutoresizingMaskIntoConstraints = NO;
-
-    // Add padding by creating a container view or using insets
-    _boundsLabel.layer.masksToBounds = YES;
-    [self addSubview:_boundsLabel];
-
-    // Position label at top-left corner with padding
-    [NSLayoutConstraint activateConstraints:@[
-      [_boundsLabel.topAnchor constraintEqualToAnchor:self.safeAreaLayoutGuide.topAnchor
-                                             constant:8],
-      [_boundsLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:8],
-      [_boundsLabel.widthAnchor constraintLessThanOrEqualToConstant:300],
-      [_boundsLabel.heightAnchor constraintGreaterThanOrEqualToConstant:70]
-    ]];
-
-    // Initial bounds update
-    [self updateBoundsDisplay];
   }
 
   return self;
@@ -108,47 +76,6 @@ getEmitter(const SharedViewEventEmitter emitter) {
                                       .left = _lastEdgeInsets.left * _view.zoomScale,
                                       .bottom = _lastEdgeInsets.bottom * _view.zoomScale,
                                       .right = _lastEdgeInsets.right * _view.zoomScale};
-  [self updateBoundsDisplay];
-}
-
-- (void)scrollViewDidZoom:(UIScrollView*)scrollView {
-  // No longer needed since we removed border layer
-  [self updateBoundsDisplay];
-}
-
-- (void)scrollViewDidScroll:(UIScrollView*)scrollView {
-  [self updateBoundsDisplay];
-}
-
-- (void)updateBoundsDisplay {
-  if (!_boundsLabel || !_view) {
-    return;
-  }
-
-  CGRect viewBounds = _view.bounds;
-  CGRect drawingBounds = _view.drawing.bounds;
-  UIEdgeInsets contentInset = _view.contentInset;
-  CGFloat zoomScale = _view.zoomScale;
-
-  NSString* boundsText = [NSString
-      stringWithFormat:@"  View Bounds:\n"
-                       @"  x: %.1f, y: %.1f\n"
-                       @"  w: %.1f, h: %.1f\n\n"
-                       @"  Drawing Bounds:\n"
-                       @"  x: %.1f, y: %.1f\n"
-                       @"  w: %.1f, h: %.1f\n\n"
-                       @"  Content Inset:\n"
-                       @"  top: %.1f, left: %.1f\n"
-                       @"  bottom: %.1f, right: %.1f\n\n"
-                       @"  Zoom Scale: %.2f  ",
-                       viewBounds.origin.x, viewBounds.origin.y, viewBounds.size.width,
-                       viewBounds.size.height, drawingBounds.origin.x, drawingBounds.origin.y,
-                       drawingBounds.size.width, drawingBounds.size.height, contentInset.top,
-                       contentInset.left, contentInset.bottom, contentInset.right, zoomScale];
-
-  dispatch_async(dispatch_get_main_queue(), ^{
-    self->_boundsLabel.text = boundsText;
-  });
 }
 
 - (UIImage*)loadImageFromPath:(NSString*)imagePath {
@@ -204,72 +131,33 @@ getEmitter(const SharedViewEventEmitter emitter) {
     [_view setBackgroundColor:intToColor(next.backgroundColor)];
   }
 
-  // All content size, insets, and styling are now handled by infinite scrolling implementation
+  if (prev.allowInfiniteScroll ^ next.allowInfiniteScroll) {
+    _allowInfiniteScroll = next.allowInfiniteScroll;
+    _view.contentSize = next.allowInfiniteScroll ? CGSizeMake(10000, 10000) : CGSizeZero;
+    if (next.allowInfiniteScroll) {
+      [self updateContentInset];
+    }
+  }
+
+  if (prev.minimumZoomScale != next.minimumZoomScale)
+    _view.minimumZoomScale = next.minimumZoomScale;
+
+  if (prev.maximumZoomScale != next.maximumZoomScale)
+    _view.maximumZoomScale = next.maximumZoomScale;
 
   [super updateProps:props oldProps:oldProps];
 }
 
 - (void)layoutSubviews {
   [super layoutSubviews];
-  [self updateBoundsDisplay];
 }
 
-// - (void)updateContentInset {
-//     CGRect viewportBounds = _view.bounds;
-//     // Create viewport-sized margins
-//     UIEdgeInsets viewportMargins = UIEdgeInsetsMake(
-//         -viewportBounds.size.height,
-//         -viewportBounds.size.width,
-//         -viewportBounds.size.height,
-//         -viewportBounds.size.width
-//     );
-
-//     // NSLog(@"[RNPencilKit] viewportMargins: %@",
-//     //           NSStringFromUIEdgeInsets(viewportMargins));
-//     NSLog(@"[RNPencilKit] _view.bounds: %@",
-//               NSStringFromCGRect(_view.bounds));
-//     // NSLog(@"[RNPencilKit] _view.zoomScale: %f",
-//     //           _view.zoomScale);
-
-//     if (CGSizeEqualToSize(_view.drawing.bounds.size, CGSizeZero)) {
-//         // No drawing case - center the viewport
-//         CGFloat leftInset = (_view.contentSize.width - CGRectGetWidth(viewportBounds)) / 2;
-//         CGFloat topInset = (_view.contentSize.height - CGRectGetHeight(viewportBounds)) / 2;
-
-//         _view.contentInset = UIEdgeInsetsMake(
-//             -topInset,
-//             -leftInset,
-//             -topInset,
-//             -leftInset
-//         );
-//     } else {
-//         // Existing drawing case
-
-//         CGRect realContentBounds = CGRectInset(_view.drawing.bounds, viewportMargins.left,
-//         viewportMargins.top);
-
-//         // Union with viewport to include visible area
-//         CGRect finalContentBounds = CGRectUnion(realContentBounds, viewportBounds);
-
-//         _view.contentInset = UIEdgeInsetsMake(
-//           -finalContentBounds.origin.y,
-//           -finalContentBounds.origin.x,
-//           -(_view.contentSize.height - CGRectGetMaxY(finalContentBounds)),
-//           -(_view.contentSize.width - CGRectGetMaxX(finalContentBounds))
-//         );
-//         // NSLog(@"[RNPencilKit] _view.drawing.bounds: %@",
-//         NSStringFromCGRect(_view.drawing.bounds));
-//         // NSLog(@"[RNPencilKit] realContentBounds: %@", NSStringFromCGRect(realContentBounds));
-//         // NSLog(@"[RNPencilKit] finalContentBounds: %@",
-//         NSStringFromCGRect(finalContentBounds));
-//         // NSLog(@"[RNPencilKit] _view.contentInset: %@",
-//         NSStringFromUIEdgeInsets(_view.contentInset));
-//     }
-
-//     // NSLog(@"[RNPencilKit] =========");
-// }
-
 - (void)updateContentInset {
+  // don't bother if the allowInfiniteScroll prop isn't set
+  if (!_allowInfiniteScroll) {
+    return;
+  }
+
   const CGFloat z = MAX(_view.zoomScale, 0.0001);
 
   // Visible size in content coordinates
@@ -324,9 +212,6 @@ getEmitter(const SharedViewEventEmitter emitter) {
       .bottom = -(_view.contentSize.height - CGRectGetMaxY(finalContentBounds)),
       .right = -(_view.contentSize.width - CGRectGetMaxX(finalContentBounds)),
   };
-
-  // Update bounds display after content inset changes
-  [self updateBoundsDisplay];
 }
 
 - (void)clear {
@@ -361,12 +246,32 @@ getEmitter(const SharedViewEventEmitter emitter) {
   };
 }
 
-- (NSString*)getBase64PngData:(double)scale {
+// - (NSString*)getBase64PngData:(double)scale {
+//   return [self getBase64PngData:scale x:0 y:0 width:0 height:0];
+// }
+
+- (NSString*)getBase64PngData:(double)scale
+                            x:(double)x
+                            y:(double)y
+                        width:(double)width
+                       height:(double)height {
   NSData* data = _view.drawing.dataRepresentation;
   if (!data) {
     return nil;
   }
-  UIImage* image = [_view.drawing imageFromRect:_view.bounds
+
+  CGRect rect;
+  if (width > 0 && height > 0) {
+
+    rect = CGRectMake(_view.bounds.origin.x + (x / _view.zoomScale),
+                      _view.bounds.origin.y + (y / _view.zoomScale), width / _view.zoomScale,
+                      height / _view.zoomScale);
+  } else {
+    // Use the default bounds
+    rect = _view.bounds;
+  }
+
+  UIImage* image = [_view.drawing imageFromRect:rect
                                           scale:scale == 0 ? UIScreen.mainScreen.scale : scale];
   NSData* imageData = UIImagePNGRepresentation(image);
   return [imageData base64EncodedStringWithOptions:0];
@@ -578,7 +483,6 @@ getEmitter(const SharedViewEventEmitter emitter) {
 - (void)canvasViewDrawingDidChange:(PKCanvasView*)canvasView {
   if (auto e = getEmitter(_eventEmitter)) {
     [self updateContentInset];
-    [self updateBoundsDisplay];
     e->onCanvasViewDrawingDidChange({});
   }
 }

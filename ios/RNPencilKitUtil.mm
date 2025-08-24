@@ -40,13 +40,31 @@ RCT_EXPORT_MODULE()
   });
 }
 
-- (void)getBase64PngData:(double)viewId
-                   scale:(double)scale
+- (void)getDrawingBounds:(double)viewId
                  resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject {
   RCTExecuteOnMainQueue(^{
     RNPencilKit* view = [self getView:viewId];
-    NSString* ret = [view getBase64PngData:scale];
+    NSDictionary* bounds = [view getDrawingBounds];
+    if (bounds) {
+      resolve(bounds);
+    } else {
+      [self doReject:reject name:@"getDrawingBounds"];
+    }
+  });
+}
+
+- (void)getBase64PngData:(double)viewId
+                   scale:(double)scale
+                       x:(double)x
+                       y:(double)y
+                   width:(double)width
+                  height:(double)height
+                 resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject {
+  RCTExecuteOnMainQueue(^{
+    RNPencilKit* view = [self getView:viewId];
+    NSString* ret = [view getBase64PngData:scale x:x y:y width:width height:height];
     if (ret) {
       resolve(ret);
     } else {

@@ -21,6 +21,8 @@ function PencilKitComponent(
     contentAreaBorderWidth,
     contentAreaBorderColor,
     contentAreaBackgroundColor,
+    pageBackgroundImage,
+    allowInfiniteScroll = false,
     onToolPickerFramesObscuredDidChange,
     onToolPickerIsRulerActiveDidChange,
     onToolPickerSelectedToolDidChange,
@@ -53,15 +55,27 @@ function PencilKitComponent(
 
         return NativeRNPencilKitUtil.loadDrawing(handle, path);
       },
+      getDrawingBounds: async () => {
+        const handle = findNodeHandle(nativeRef.current) ?? -1;
+
+        return NativeRNPencilKitUtil.getDrawingBounds(handle);
+      },
       getBase64Data: async () => {
         const handle = findNodeHandle(nativeRef.current) ?? -1;
 
         return NativeRNPencilKitUtil.getBase64Data(handle);
       },
-      getBase64PngData: async ({ scale = 0 } = { scale: 0 }) => {
+      getBase64PngData: async (
+        { scale = 0, x = 0, y = 0, width = 0, height = 0 } = {
+          scale: 0,
+          x: 0,
+          y: 0,
+          width: 0,
+          height: 0,
+        },
+      ) => {
         const handle = findNodeHandle(nativeRef.current) ?? -1;
-
-        return NativeRNPencilKitUtil.getBase64PngData(handle, scale).then(
+        return NativeRNPencilKitUtil.getBase64PngData(handle, scale, x, y, width, height).then(
           (d) => `data:image/png;base64,${d}`,
         );
       },
@@ -113,6 +127,8 @@ function PencilKitComponent(
         contentAreaBorderWidth,
         contentAreaBorderColor: processColor(contentAreaBorderColor) as number,
         contentAreaBackgroundColor: processColor(contentAreaBackgroundColor) as number,
+        pageBackgroundImage,
+        allowInfiniteScroll,
         onToolPickerFramesObscuredDidChange,
         onToolPickerIsRulerActiveDidChange,
         onToolPickerSelectedToolDidChange,

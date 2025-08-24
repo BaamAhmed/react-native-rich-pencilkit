@@ -13,7 +13,13 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface RNPencilKit : RCTViewComponentView
 - (NSString*)getBase64Data;
+- (NSDictionary*)getDrawingBounds;
 - (NSString*)getBase64PngData:(double)scale;
+- (NSString*)getBase64PngData:(double)scale
+                            x:(double)x
+                            y:(double)y
+                        width:(double)width
+                       height:(double)height;
 - (NSString*)getBase64JpegData:(double)scale compression:(double)compression;
 - (NSString*)saveDrawing:(nonnull NSString*)path;
 - (BOOL)loadDrawing:(nonnull NSString*)path;

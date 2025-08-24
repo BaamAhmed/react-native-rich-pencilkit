@@ -32,6 +32,9 @@ export type PencilKitProps = {
   contentAreaBorderWidth?: number;
   contentAreaBorderColor?: ColorValue;
   contentAreaBackgroundColor?: ColorValue;
+  pageBackgroundImage?: string;
+
+  allowInfiniteScroll?: boolean;
 
   onToolPickerVisibilityDidChange?: DirectEventHandler<{}>;
   onToolPickerIsRulerActiveDidChange?: DirectEventHandler<{}>;
@@ -65,11 +68,23 @@ export type PencilKitRef = {
   saveDrawing: (path: string) => Promise<string>;
   loadDrawing: (path: string) => Promise<void>;
   getBase64Data: () => Promise<string>;
-  getBase64PngData: (params?: { scale?: number }) => Promise<string>;
+  getBase64PngData: (params?: {
+    scale?: number;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+  }) => Promise<string>;
+  getDrawingBounds: () => Promise<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }>;
   getBase64JpegData: (params?: { scale?: number; compression?: number }) => Promise<string>;
   loadBase64Data: (base64: string) => Promise<void>;
 };
-
-export const PencilKit = forwardRef((_props: PencilKitProps, _ref: ForwardedRef<PencilKitRef>) => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const PencilKit = forwardRef((props: PencilKitProps, ref: ForwardedRef<PencilKitRef>) => {
   return <Text>{"This platform doesn't support pencilkit"}</Text>;
 });
