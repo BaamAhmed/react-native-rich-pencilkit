@@ -350,7 +350,19 @@ getEmitter(const SharedViewEventEmitter emitter) {
   [newView setDrawingPolicy:v.drawingPolicy];
   [newView setOpaque:v.isOpaque];
   newView.contentSize = v.contentSize;
+  newView.contentInset = v.contentInset;
+  newView.minimumZoomScale = v.minimumZoomScale;
+  newView.maximumZoomScale = v.maximumZoomScale;
+  newView.bounds = v.bounds;
   newView.delegate = self;
+
+  // ── Copy Pencil double-tap interaction (2nd-gen Pencil or Apple Pencil Pro) ──
+  if (@available(iOS 12.1, *)) {
+    UIPencilInteraction* pencilInteraction = [[UIPencilInteraction alloc] init];
+    pencilInteraction.delegate = self;
+    [newView addInteraction:pencilInteraction];
+  }
+
   [_toolPicker removeObserver:v];
   [_toolPicker addObserver:newView];
   [_toolPicker setVisible:true forFirstResponder:newView];
