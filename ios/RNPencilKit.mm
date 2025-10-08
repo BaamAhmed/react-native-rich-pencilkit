@@ -263,8 +263,8 @@ getEmitter(const SharedViewEventEmitter emitter) {
   CGRect rect;
   if (width > 0 && height > 0) {
 
-    rect = CGRectMake(_view.bounds.origin.x + (x / _view.zoomScale),
-                      _view.bounds.origin.y + (y / _view.zoomScale), width / _view.zoomScale,
+    rect = CGRectMake((_view.bounds.origin.x + x) / _view.zoomScale,
+                      (_view.bounds.origin.y + y) / _view.zoomScale, width / _view.zoomScale,
                       height / _view.zoomScale);
   } else {
     // Use the default bounds
