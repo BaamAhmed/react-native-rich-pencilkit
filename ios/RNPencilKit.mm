@@ -133,10 +133,12 @@ getEmitter(const SharedViewEventEmitter emitter) {
 
   if (prev.allowInfiniteScroll ^ next.allowInfiniteScroll) {
     _allowInfiniteScroll = next.allowInfiniteScroll;
-    _view.contentSize = next.allowInfiniteScroll ? CGSizeMake(10000, 10000) : CGSizeZero;
     if (next.allowInfiniteScroll) {
-      [self updateContentInset];
+      _view.contentSize = CGSizeMake(10000, 10000);
+    } else {
+      _view.contentSize = CGSizeMake(_view.bounds.size.width, _view.bounds.size.height);
     }
+    [self updateContentInset];
   }
 
   if (prev.minimumZoomScale != next.minimumZoomScale)
@@ -268,7 +270,9 @@ getEmitter(const SharedViewEventEmitter emitter) {
                       height / _view.zoomScale);
   } else {
     // Use the default bounds
-    rect = _view.bounds;
+    rect = CGRectMake(
+        _view.bounds.origin.x / _view.zoomScale, _view.bounds.origin.y / _view.zoomScale,
+        _view.bounds.size.width / _view.zoomScale, _view.bounds.size.height / _view.zoomScale);
   }
 
   UIImage* image = [_view.drawing imageFromRect:rect
