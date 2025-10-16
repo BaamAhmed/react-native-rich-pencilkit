@@ -15,6 +15,24 @@ getEmitter(const SharedViewEventEmitter emitter) {
   return std::static_pointer_cast<const RNPencilKitEventEmitter>(emitter);
 }
 
+// 1) Make an isolated canvas subclass
+@interface PKIsolatedCanvasView : PKCanvasView
+@property(nonatomic, strong) NSUndoManager* isolatedUndoManager;
+@end
+
+@implementation PKIsolatedCanvasView
+- (instancetype)initWithFrame:(CGRect)frame {
+  if (self = [super initWithFrame:frame]) {
+    _isolatedUndoManager = [NSUndoManager new];
+    _isolatedUndoManager.levelsOfUndo = 256; // tune as needed
+  }
+  return self;
+}
+- (NSUndoManager*)undoManager {
+  return _isolatedUndoManager;
+}
+@end
+
 @interface RNPencilKit () <RCTRNPencilKitViewProtocol, PKCanvasViewDelegate, PKToolPickerObserver,
                            UIPencilInteractionDelegate, UIScrollViewDelegate>
 
@@ -32,7 +50,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
   if (self = [super initWithFrame:frame]) {
     static const auto defaultProps = std::make_shared<const RNPencilKitProps>();
     _props = defaultProps;
-    _view = [[PKCanvasView alloc] initWithFrame:frame];
+    _view = [[PKIsolatedCanvasView alloc] initWithFrame:frame];
     _view.backgroundColor = [UIColor clearColor];
 
     _view.delegate = self;
@@ -214,6 +232,10 @@ getEmitter(const SharedViewEventEmitter emitter) {
       .bottom = -(_view.contentSize.height - CGRectGetMaxY(finalContentBounds)),
       .right = -(_view.contentSize.width - CGRectGetMaxX(finalContentBounds)),
   };
+}
+
+- (void)clearUndoStack {
+  [_view.undoManager removeAllActions];
 }
 
 - (void)clear {

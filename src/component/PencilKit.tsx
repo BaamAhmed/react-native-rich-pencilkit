@@ -59,6 +59,7 @@ export type PencilKitTool =
   | 'eraserFixedWidthBitmap';
 export type PencilKitRef = {
   clear: () => void;
+  clearUndoStack: () => void;
   showToolPicker: () => void;
   hideToolPicker: () => void;
   redo: () => void;

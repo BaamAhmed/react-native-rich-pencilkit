@@ -52,6 +52,7 @@ export interface NativeProps extends ViewProps {
 
 export interface PencilKitCommands {
   clear: (ref: React.ElementRef<ComponentType>) => void;
+  clearUndoStack: (ref: React.ElementRef<ComponentType>) => void;
   showToolPicker: (ref: React.ElementRef<ComponentType>) => void;
   hideToolPicker: (ref: React.ElementRef<ComponentType>) => void;
   redo: (ref: React.ElementRef<ComponentType>) => void;
@@ -68,6 +69,7 @@ export interface PencilKitCommands {
 export const Commands: PencilKitCommands = codegenNativeCommands<PencilKitCommands>({
   supportedCommands: [
     'clear',
+    'clearUndoStack',
     'showToolPicker',
     'hideToolPicker',
     'redo',

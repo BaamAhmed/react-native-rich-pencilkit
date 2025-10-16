@@ -41,6 +41,7 @@ function PencilKitComponent(
     ref,
     () => ({
       clear: () => Commands.clear(nativeRef.current!),
+      clearUndoStack: () => Commands.clear(nativeRef.current!),
       showToolPicker: () => Commands.showToolPicker(nativeRef.current!),
       hideToolPicker: () => Commands.hideToolPicker(nativeRef.current!),
       redo: () => Commands.redo(nativeRef.current!),
