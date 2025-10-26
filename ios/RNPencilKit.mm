@@ -602,6 +602,10 @@ getEmitter(const SharedViewEventEmitter emitter) {
     }
   }
 
+  if (tool == "select") {
+    _toolPicker.selectedTool = _view.tool = [[PKLassoTool alloc] init];
+  }
+
   if (tool == "eraserVector") {
     if (@available(iOS 16.4, *)) {
       _toolPicker.selectedTool = _view.tool =

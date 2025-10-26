@@ -51,6 +51,7 @@ export type PencilKitTool =
   | 'pen'
   | 'pencil'
   | 'marker'
+  | 'select'
   | 'monoline'
   | 'fountainPen'
   | 'watercolor'
