@@ -38,6 +38,7 @@ export interface NativeProps extends ViewProps {
   contentAreaBorderColor?: Int32;
   contentAreaBackgroundColor?: Int32;
   allowInfiniteScroll?: boolean;
+  showDebugInfo?: boolean;
 
   onToolPickerVisibilityDidChange?: DirectEventHandler<{}>;
   onToolPickerIsRulerActiveDidChange?: DirectEventHandler<{}>;

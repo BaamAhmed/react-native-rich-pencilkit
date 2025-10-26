@@ -44,6 +44,9 @@ getEmitter(const SharedViewEventEmitter emitter) {
   UILabel* _Nullable _boundsLabel;
   UIEdgeInsets _lastEdgeInsets;
   BOOL _allowInfiniteScroll;
+  UILabel* _Nullable _debugLabel;
+  BOOL _showDebugInfo;
+  CADisplayLink* _Nullable _displayLink;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -66,6 +69,9 @@ getEmitter(const SharedViewEventEmitter emitter) {
       pencilInteraction.delegate = self;
       [_view addInteraction:pencilInteraction];
     }
+
+    // Initialize debug label (hidden by default)
+    [self setupDebugLabel];
   }
 
   return self;
@@ -74,6 +80,129 @@ getEmitter(const SharedViewEventEmitter emitter) {
 - (void)dealloc {
   [_toolPicker removeObserver:_view];
   [_toolPicker removeObserver:self];
+  [self stopDebugUpdates];
+}
+
+- (void)setupDebugLabel {
+  _debugLabel = [[UILabel alloc] init];
+  _debugLabel.numberOfLines = 0;
+  _debugLabel.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightRegular];
+  _debugLabel.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.75];
+  _debugLabel.textColor = [UIColor whiteColor];
+  _debugLabel.layer.cornerRadius = 6;
+  _debugLabel.layer.masksToBounds = YES;
+  _debugLabel.textAlignment = NSTextAlignmentLeft;
+  _debugLabel.hidden = YES;
+  _debugLabel.userInteractionEnabled = NO;
+
+  // Add padding
+  _debugLabel.contentMode = UIViewContentModeTop;
+  [self addSubview:_debugLabel];
+}
+
+- (void)startDebugUpdates {
+  if (!_displayLink) {
+    _displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(updateDebugInfo)];
+    [_displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+  }
+}
+
+- (void)stopDebugUpdates {
+  if (_displayLink) {
+    [_displayLink invalidate];
+    _displayLink = nil;
+  }
+}
+
+- (void)updateDebugInfo {
+  if (!_showDebugInfo || !_debugLabel) {
+    return;
+  }
+
+  CGRect drawingBounds = _view.drawing.bounds;
+  CGRect viewBounds = _view.bounds;
+  CGFloat zoomScale = _view.zoomScale;
+  UIEdgeInsets contentInset = _view.contentInset;
+  CGPoint contentOffset = _view.contentOffset;
+  CGSize contentSize = _view.contentSize;
+
+  // Calculate scaled drawing bounds
+  CGRect scaledDrawingBounds =
+      CGRectMake(drawingBounds.origin.x * zoomScale, drawingBounds.origin.y * zoomScale,
+                 drawingBounds.size.width * zoomScale, drawingBounds.size.height * zoomScale);
+
+  // Visible region calculation
+  CGPoint visibleOrigin = CGPointMake(viewBounds.origin.x, viewBounds.origin.y);
+  CGSize visibleSize = CGSizeMake(viewBounds.size.width, viewBounds.size.height);
+
+  NSMutableString* debugText = [NSMutableString string];
+  [debugText appendString:@"  DEBUG INFO  \n"];
+  [debugText appendString:@"━━━━━━━━━━━━━\n"];
+  [debugText appendFormat:@"Zoom: %.2fx\n", zoomScale];
+  [debugText appendFormat:@"MinZoom: %.2f MaxZoom: %.2f\n", _view.minimumZoomScale,
+                          _view.maximumZoomScale];
+  [debugText appendString:@"\n"];
+  [debugText appendFormat:@"Content Offset:\n  (%.1f, %.1f)\n", contentOffset.x, contentOffset.y];
+  [debugText appendString:@"\n"];
+  [debugText appendFormat:@"View Bounds:\n  x:%.1f y:%.1f\n  w:%.1f h:%.1f\n", viewBounds.origin.x,
+                          viewBounds.origin.y, viewBounds.size.width, viewBounds.size.height];
+  [debugText appendString:@"\n"];
+  [debugText
+      appendFormat:@"Content Size:\n  w:%.1f h:%.1f\n", contentSize.width, contentSize.height];
+  [debugText appendString:@"\n"];
+  [debugText appendFormat:@"Content Inset:\n  t:%.1f l:%.1f\n  b:%.1f r:%.1f\n", contentInset.top,
+                          contentInset.left, contentInset.bottom, contentInset.right];
+  [debugText appendString:@"\n"];
+  [debugText appendFormat:@"Drawing Bounds:\n  x:%.1f y:%.1f\n  w:%.1f h:%.1f\n",
+                          drawingBounds.origin.x, drawingBounds.origin.y, drawingBounds.size.width,
+                          drawingBounds.size.height];
+  [debugText appendString:@"\n"];
+  [debugText appendFormat:@"Scaled Drawing:\n  x:%.1f y:%.1f\n  w:%.1f h:%.1f\n",
+                          scaledDrawingBounds.origin.x, scaledDrawingBounds.origin.y,
+                          scaledDrawingBounds.size.width, scaledDrawingBounds.size.height];
+  [debugText appendString:@"\n"];
+  [debugText appendFormat:@"Visible Origin:\n  (%.1f, %.1f)\n", visibleOrigin.x, visibleOrigin.y];
+  [debugText appendString:@"\n"];
+  [debugText appendFormat:@"InfiniteScroll: %@\n", _allowInfiniteScroll ? @"YES" : @"NO"];
+
+  _debugLabel.text = debugText;
+
+  // Size the label to fit content with padding
+  CGSize maxSize = CGSizeMake(220, CGFLOAT_MAX);
+  CGSize textSize = [debugText boundingRectWithSize:maxSize
+                                            options:NSStringDrawingUsesLineFragmentOrigin
+                                         attributes:@{NSFontAttributeName : _debugLabel.font}
+                                            context:nil]
+                        .size;
+
+  CGFloat padding = 8;
+  CGFloat labelWidth = textSize.width + padding * 2;
+  CGFloat labelHeight = textSize.height + padding * 2;
+
+  // Position in top right corner
+  CGFloat xPos = self.bounds.size.width - labelWidth - 10;
+  CGFloat yPos = 10;
+
+  _debugLabel.frame = CGRectMake(xPos, yPos, labelWidth, labelHeight);
+
+  // Add inner padding by adjusting text rect
+  _debugLabel.textAlignment = NSTextAlignmentLeft;
+
+  // Adjust attributed string for padding
+  NSMutableParagraphStyle* paragraphStyle = [[NSMutableParagraphStyle alloc] init];
+  paragraphStyle.headIndent = padding;
+  paragraphStyle.firstLineHeadIndent = padding;
+  paragraphStyle.tailIndent = -padding;
+
+  NSAttributedString* attributedText =
+      [[NSAttributedString alloc] initWithString:debugText
+                                      attributes:@{
+                                        NSFontAttributeName : _debugLabel.font,
+                                        NSForegroundColorAttributeName : _debugLabel.textColor,
+                                        NSParagraphStyleAttributeName : paragraphStyle
+                                      }];
+
+  _debugLabel.attributedText = attributedText;
 }
 
 - (void)scrollViewWillBeginZooming:(UIScrollView*)scrollView withView:(UIView*)view {
@@ -90,10 +219,13 @@ getEmitter(const SharedViewEventEmitter emitter) {
                         atScale:(CGFloat)scale {
   // Restore content inset when zooming ends
   // [self updateContentInset];
-  _view.contentInset = (UIEdgeInsets){.top = _lastEdgeInsets.top * _view.zoomScale,
-                                      .left = _lastEdgeInsets.left * _view.zoomScale,
-                                      .bottom = _lastEdgeInsets.bottom * _view.zoomScale,
-                                      .right = _lastEdgeInsets.right * _view.zoomScale};
+  // _view.contentInset = (UIEdgeInsets){
+  //     .top    = _lastEdgeInsets.top * _view.zoomScale,
+  //     .left   = _lastEdgeInsets.left * _view.zoomScale,
+  //     .bottom = _lastEdgeInsets.bottom * _view.zoomScale,
+  //     .right  = _lastEdgeInsets.right * _view.zoomScale
+  // };
+  [self updateContentInset];
 }
 
 - (UIImage*)loadImageFromPath:(NSString*)imagePath {
@@ -152,7 +284,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
   if (prev.allowInfiniteScroll ^ next.allowInfiniteScroll) {
     _allowInfiniteScroll = next.allowInfiniteScroll;
     if (next.allowInfiniteScroll) {
-      _view.contentSize = CGSizeMake(10000, 10000);
+      _view.contentSize = CGSizeMake(50000, 50000);
     } else {
       _view.contentSize = CGSizeMake(_view.bounds.size.width, _view.bounds.size.height);
     }
@@ -165,11 +297,29 @@ getEmitter(const SharedViewEventEmitter emitter) {
   if (prev.maximumZoomScale != next.maximumZoomScale)
     _view.maximumZoomScale = next.maximumZoomScale;
 
+  if (prev.showDebugInfo ^ next.showDebugInfo) {
+    _showDebugInfo = next.showDebugInfo;
+    _debugLabel.hidden = !next.showDebugInfo;
+
+    if (next.showDebugInfo) {
+      [self startDebugUpdates];
+      [self updateDebugInfo];
+    } else {
+      [self stopDebugUpdates];
+    }
+  }
+
   [super updateProps:props oldProps:oldProps];
 }
 
 - (void)layoutSubviews {
   [super layoutSubviews];
+
+  if (_showDebugInfo) {
+    [self updateDebugInfo];
+    // Ensure debug label stays on top
+    [self bringSubviewToFront:_debugLabel];
+  }
 }
 
 - (void)updateContentInset {
@@ -363,6 +513,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
 
     [_view.undoManager removeAllActions];
     [_view setDrawing:drawing];
+    // [self updateContentInset];
     return YES;
   }
 }
@@ -375,10 +526,12 @@ getEmitter(const SharedViewEventEmitter emitter) {
   [newView setBackgroundColor:v.backgroundColor];
   [newView setDrawingPolicy:v.drawingPolicy];
   [newView setOpaque:v.isOpaque];
-  newView.contentSize = v.contentSize;
+  newView.contentSize =
+      CGSizeMake(v.contentSize.width / v.zoomScale, v.contentSize.height / v.zoomScale);
   newView.contentInset = v.contentInset;
   newView.minimumZoomScale = v.minimumZoomScale;
   newView.maximumZoomScale = v.maximumZoomScale;
+  newView.zoomScale = v.zoomScale;
   newView.bounds = v.bounds;
   newView.delegate = self;
 

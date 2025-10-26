@@ -35,6 +35,7 @@ export type PencilKitProps = {
   pageBackgroundImage?: string;
 
   allowInfiniteScroll?: boolean;
+  showDebugInfo?: boolean;
 
   onToolPickerVisibilityDidChange?: DirectEventHandler<{}>;
   onToolPickerIsRulerActiveDidChange?: DirectEventHandler<{}>;
