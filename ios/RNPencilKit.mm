@@ -47,6 +47,8 @@ getEmitter(const SharedViewEventEmitter emitter) {
   UILabel* _Nullable _debugLabel;
   BOOL _showDebugInfo;
   CADisplayLink* _Nullable _displayLink;
+  UIImageView* _Nullable _backgroundImageView;
+  BOOL _showLinedPaper;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -61,6 +63,10 @@ getEmitter(const SharedViewEventEmitter emitter) {
     [_toolPicker addObserver:_view];
     [_toolPicker addObserver:self];
     [_toolPicker setVisible:YES forFirstResponder:_view];
+
+    // Setup background image before setting contentView
+    [self setupBackgroundImage];
+
     self.contentView = _view;
 
     // ── Register for Pencil double-tap (2nd-gen Pencil or Apple Pencil Pro) ──
@@ -98,6 +104,32 @@ getEmitter(const SharedViewEventEmitter emitter) {
   // Add padding
   _debugLabel.contentMode = UIViewContentModeTop;
   [self addSubview:_debugLabel];
+}
+
+- (void)setupBackgroundImage {
+  // Only setup if showLinedPaper is enabled
+  if (!_showLinedPaper) {
+    return;
+  }
+
+  // Load the background image from the bundle
+  UIImage* backgroundImage = [UIImage imageNamed:@"pencilkit_background"
+                                        inBundle:[NSBundle bundleForClass:[self class]]
+                   compatibleWithTraitCollection:nil];
+
+  if (backgroundImage) {
+    // Create an image view with size adjusted for current zoom scale
+    CGFloat scale = _view.zoomScale;
+    _backgroundImageView =
+        [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 25000 * scale, 25000 * scale)];
+    _backgroundImageView.image = backgroundImage;
+    _backgroundImageView.contentMode = UIViewContentModeScaleToFill;
+    _backgroundImageView.userInteractionEnabled = NO;
+
+    // Add the image view to the canvas and send it to the back
+    [_view addSubview:_backgroundImageView];
+    [_view sendSubviewToBack:_backgroundImageView];
+  }
 }
 
 - (void)startDebugUpdates {
@@ -228,6 +260,14 @@ getEmitter(const SharedViewEventEmitter emitter) {
   [self updateContentInset];
 }
 
+- (void)scrollViewDidZoom:(UIScrollView*)scrollView {
+  // Update background image size to match zoom level
+  if (_backgroundImageView) {
+    CGFloat scale = _view.zoomScale;
+    _backgroundImageView.frame = CGRectMake(0, 0, 25000 * scale, 25000 * scale);
+  }
+}
+
 - (UIImage*)loadImageFromPath:(NSString*)imagePath {
   UIImage* image = nil;
 
@@ -284,7 +324,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
   if (prev.allowInfiniteScroll ^ next.allowInfiniteScroll) {
     _allowInfiniteScroll = next.allowInfiniteScroll;
     if (next.allowInfiniteScroll) {
-      _view.contentSize = CGSizeMake(50000, 50000);
+      _view.contentSize = CGSizeMake(10000, 10000);
     } else {
       _view.contentSize = CGSizeMake(_view.bounds.size.width, _view.bounds.size.height);
     }
@@ -306,6 +346,21 @@ getEmitter(const SharedViewEventEmitter emitter) {
       [self updateDebugInfo];
     } else {
       [self stopDebugUpdates];
+    }
+  }
+
+  if (prev.showLinedPaper ^ next.showLinedPaper) {
+    _showLinedPaper = next.showLinedPaper;
+
+    if (next.showLinedPaper) {
+      // Enable background image
+      [self setupBackgroundImage];
+    } else {
+      // Disable background image
+      if (_backgroundImageView) {
+        [_backgroundImageView removeFromSuperview];
+        _backgroundImageView = nil;
+      }
     }
   }
 
@@ -535,6 +590,24 @@ getEmitter(const SharedViewEventEmitter emitter) {
   newView.zoomScale = v.zoomScale;
   newView.bounds = v.bounds;
   newView.delegate = self;
+
+  // Setup background image for the new canvas
+  if (_showLinedPaper) {
+    UIImage* backgroundImage = [UIImage imageNamed:@"pencilkit_background"
+                                          inBundle:[NSBundle bundleForClass:[self class]]
+                     compatibleWithTraitCollection:nil];
+    if (backgroundImage) {
+      CGFloat scale = newView.zoomScale;
+      UIImageView* newBackgroundImageView =
+          [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 25000 * scale, 25000 * scale)];
+      newBackgroundImageView.image = backgroundImage;
+      newBackgroundImageView.contentMode = UIViewContentModeScaleToFill;
+      newBackgroundImageView.userInteractionEnabled = NO;
+      [newView addSubview:newBackgroundImageView];
+      [newView sendSubviewToBack:newBackgroundImageView];
+      _backgroundImageView = newBackgroundImageView;
+    }
+  }
 
   // ── Copy Pencil double-tap interaction (2nd-gen Pencil or Apple Pencil Pro) ──
   if (@available(iOS 12.1, *)) {
