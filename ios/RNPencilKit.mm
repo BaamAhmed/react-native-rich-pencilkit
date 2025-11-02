@@ -519,7 +519,8 @@ getEmitter(const SharedViewEventEmitter emitter) {
 }
 
 - (PKCanvasView*)copyCanvas:(PKCanvasView*)v {
-  PKCanvasView* newView = [[PKCanvasView alloc] initWithFrame:v.frame];
+  // PKCanvasView* newView = [[PKCanvasView alloc] initWithFrame:v.frame];
+  PKIsolatedCanvasView* newView = [[PKIsolatedCanvasView alloc] initWithFrame:v.frame];
   newView.alwaysBounceVertical = v.alwaysBounceVertical;
   newView.alwaysBounceHorizontal = v.alwaysBounceHorizontal;
   [newView setRulerActive:v.isRulerActive];
