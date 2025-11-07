@@ -121,7 +121,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
     // Create an image view with size adjusted for current zoom scale
     CGFloat scale = _view.zoomScale;
     _backgroundImageView =
-        [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 25000 * scale, 25000 * scale)];
+        [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 20000 * scale, 20000 * scale)];
     _backgroundImageView.image = backgroundImage;
     _backgroundImageView.contentMode = UIViewContentModeScaleToFill;
     _backgroundImageView.userInteractionEnabled = NO;
@@ -264,7 +264,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
   // Update background image size to match zoom level
   if (_backgroundImageView) {
     CGFloat scale = _view.zoomScale;
-    _backgroundImageView.frame = CGRectMake(0, 0, 25000 * scale, 25000 * scale);
+    _backgroundImageView.frame = CGRectMake(0, 0, 20000 * scale, 20000 * scale);
   }
 }
 
@@ -324,7 +324,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
   if (prev.allowInfiniteScroll ^ next.allowInfiniteScroll) {
     _allowInfiniteScroll = next.allowInfiniteScroll;
     if (next.allowInfiniteScroll) {
-      _view.contentSize = CGSizeMake(10000, 10000);
+      _view.contentSize = CGSizeMake(20000, 20000);
     } else {
       _view.contentSize = CGSizeMake(_view.bounds.size.width, _view.bounds.size.height);
     }
@@ -599,7 +599,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
     if (backgroundImage) {
       CGFloat scale = newView.zoomScale;
       UIImageView* newBackgroundImageView =
-          [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 25000 * scale, 25000 * scale)];
+          [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 20000 * scale, 20000 * scale)];
       newBackgroundImageView.image = backgroundImage;
       newBackgroundImageView.contentMode = UIViewContentModeScaleToFill;
       newBackgroundImageView.userInteractionEnabled = NO;
