@@ -63,6 +63,21 @@ getEmitter(const SharedViewEventEmitter emitter) {
     [_toolPicker addObserver:_view];
     [_toolPicker addObserver:self];
     [_toolPicker setVisible:YES forFirstResponder:_view];
+    // Set default tool to monoline black pen with width 1
+    if (@available(iOS 17.0, *)) {
+      PKInkingTool* defaultTool = [[PKInkingTool alloc] initWithInkType:PKInkTypeMonoline
+                                                                  color:[UIColor blackColor]
+                                                                  width:1.5];
+      _view.tool = defaultTool;
+      _toolPicker.selectedTool = defaultTool;
+    } else {
+      // Fallback to regular pen for iOS < 17.0
+      PKInkingTool* defaultTool = [[PKInkingTool alloc] initWithInkType:PKInkTypePen
+                                                                  color:[UIColor blackColor]
+                                                                  width:1.5];
+      _view.tool = defaultTool;
+      _toolPicker.selectedTool = defaultTool;
+    }
 
     // Setup background image before setting contentView
     [self setupBackgroundImage];
