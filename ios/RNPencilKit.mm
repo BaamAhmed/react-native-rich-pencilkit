@@ -17,7 +17,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
 
 // 1) Make an isolated canvas subclass
 @interface PKIsolatedCanvasView : PKCanvasView
-@property(nonatomic, strong) NSUndoManager* isolatedUndoManager;
+@property (nonatomic, strong) NSUndoManager *isolatedUndoManager;
 @end
 
 @implementation PKIsolatedCanvasView
@@ -28,13 +28,13 @@ getEmitter(const SharedViewEventEmitter emitter) {
   }
   return self;
 }
-- (NSUndoManager*)undoManager {
+- (NSUndoManager *)undoManager {
   return _isolatedUndoManager;
 }
 @end
 
-@interface RNPencilKit () <RCTRNPencilKitViewProtocol, PKCanvasViewDelegate, PKToolPickerObserver,
-                           UIPencilInteractionDelegate, UIScrollViewDelegate>
+
+@interface RNPencilKit () <RCTRNPencilKitViewProtocol, PKCanvasViewDelegate, PKToolPickerObserver, UIPencilInteractionDelegate, UIScrollViewDelegate>
 
 @end
 
@@ -66,31 +66,31 @@ getEmitter(const SharedViewEventEmitter emitter) {
     // Set default tool to monoline black pen with width 1
     if (@available(iOS 17.0, *)) {
       PKInkingTool* defaultTool = [[PKInkingTool alloc] initWithInkType:PKInkTypeMonoline
-                                                                  color:[UIColor blackColor]
-                                                                  width:1.5];
+                                                                   color:[UIColor blackColor]
+                                                                   width:1.5];
       _view.tool = defaultTool;
       _toolPicker.selectedTool = defaultTool;
     } else {
       // Fallback to regular pen for iOS < 17.0
       PKInkingTool* defaultTool = [[PKInkingTool alloc] initWithInkType:PKInkTypePen
-                                                                  color:[UIColor blackColor]
-                                                                  width:1.5];
+                                                                   color:[UIColor blackColor]
+                                                                   width:1.5];
       _view.tool = defaultTool;
       _toolPicker.selectedTool = defaultTool;
     }
-
+    
     // Setup background image before setting contentView
     [self setupBackgroundImage];
-
+    
     self.contentView = _view;
 
     // ── Register for Pencil double-tap (2nd-gen Pencil or Apple Pencil Pro) ──
     if (@available(iOS 12.1, *)) {
       UIPencilInteraction* pencilInteraction = [[UIPencilInteraction alloc] init];
       pencilInteraction.delegate = self;
-      [_view addInteraction:pencilInteraction];
+      [_view addInteraction:pencilInteraction]; 
     }
-
+    
     // Initialize debug label (hidden by default)
     [self setupDebugLabel];
   }
@@ -115,7 +115,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
   _debugLabel.textAlignment = NSTextAlignmentLeft;
   _debugLabel.hidden = YES;
   _debugLabel.userInteractionEnabled = NO;
-
+  
   // Add padding
   _debugLabel.contentMode = UIViewContentModeTop;
   [self addSubview:_debugLabel];
@@ -126,21 +126,18 @@ getEmitter(const SharedViewEventEmitter emitter) {
   if (!_showLinedPaper) {
     return;
   }
-
+  
   // Load the background image from the bundle
-  UIImage* backgroundImage = [UIImage imageNamed:@"pencilkit_background"
-                                        inBundle:[NSBundle bundleForClass:[self class]]
-                   compatibleWithTraitCollection:nil];
-
+  UIImage* backgroundImage = [UIImage imageNamed:@"pencilkit_background" inBundle:[NSBundle bundleForClass:[self class]] compatibleWithTraitCollection:nil];
+  
   if (backgroundImage) {
     // Create an image view with size adjusted for current zoom scale
     CGFloat scale = _view.zoomScale;
-    _backgroundImageView =
-        [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 20000 * scale, 20000 * scale)];
+    _backgroundImageView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 20000 * scale, 20000 * scale)];
     _backgroundImageView.image = backgroundImage;
     _backgroundImageView.contentMode = UIViewContentModeScaleToFill;
     _backgroundImageView.userInteractionEnabled = NO;
-
+    
     // Add the image view to the canvas and send it to the back
     [_view addSubview:_backgroundImageView];
     [_view sendSubviewToBack:_backgroundImageView];
@@ -165,148 +162,157 @@ getEmitter(const SharedViewEventEmitter emitter) {
   if (!_showDebugInfo || !_debugLabel) {
     return;
   }
-
+  
   CGRect drawingBounds = _view.drawing.bounds;
   CGRect viewBounds = _view.bounds;
   CGFloat zoomScale = _view.zoomScale;
   UIEdgeInsets contentInset = _view.contentInset;
   CGPoint contentOffset = _view.contentOffset;
   CGSize contentSize = _view.contentSize;
-
+  
   // Calculate scaled drawing bounds
-  CGRect scaledDrawingBounds =
-      CGRectMake(drawingBounds.origin.x * zoomScale, drawingBounds.origin.y * zoomScale,
-                 drawingBounds.size.width * zoomScale, drawingBounds.size.height * zoomScale);
-
+  CGRect scaledDrawingBounds = CGRectMake(
+    drawingBounds.origin.x * zoomScale,
+    drawingBounds.origin.y * zoomScale,
+    drawingBounds.size.width * zoomScale,
+    drawingBounds.size.height * zoomScale
+  );
+  
   // Visible region calculation
-  CGPoint visibleOrigin = CGPointMake(viewBounds.origin.x, viewBounds.origin.y);
-  CGSize visibleSize = CGSizeMake(viewBounds.size.width, viewBounds.size.height);
-
-  NSMutableString* debugText = [NSMutableString string];
+  CGPoint visibleOrigin = CGPointMake(
+    viewBounds.origin.x,
+    viewBounds.origin.y
+  );
+  CGSize visibleSize = CGSizeMake(
+    viewBounds.size.width,
+    viewBounds.size.height
+  );
+  
+  NSMutableString *debugText = [NSMutableString string];
   [debugText appendString:@"  DEBUG INFO  \n"];
   [debugText appendString:@"━━━━━━━━━━━━━\n"];
   [debugText appendFormat:@"Zoom: %.2fx\n", zoomScale];
-  [debugText appendFormat:@"MinZoom: %.2f MaxZoom: %.2f\n", _view.minimumZoomScale,
-                          _view.maximumZoomScale];
+  [debugText appendFormat:@"MinZoom: %.2f MaxZoom: %.2f\n", _view.minimumZoomScale, _view.maximumZoomScale];
   [debugText appendString:@"\n"];
   [debugText appendFormat:@"Content Offset:\n  (%.1f, %.1f)\n", contentOffset.x, contentOffset.y];
   [debugText appendString:@"\n"];
-  [debugText appendFormat:@"View Bounds:\n  x:%.1f y:%.1f\n  w:%.1f h:%.1f\n", viewBounds.origin.x,
-                          viewBounds.origin.y, viewBounds.size.width, viewBounds.size.height];
+  [debugText appendFormat:@"View Bounds:\n  x:%.1f y:%.1f\n  w:%.1f h:%.1f\n", 
+    viewBounds.origin.x, viewBounds.origin.y, 
+    viewBounds.size.width, viewBounds.size.height];
   [debugText appendString:@"\n"];
-  [debugText
-      appendFormat:@"Content Size:\n  w:%.1f h:%.1f\n", contentSize.width, contentSize.height];
+  [debugText appendFormat:@"Content Size:\n  w:%.1f h:%.1f\n", contentSize.width, contentSize.height];
   [debugText appendString:@"\n"];
-  [debugText appendFormat:@"Content Inset:\n  t:%.1f l:%.1f\n  b:%.1f r:%.1f\n", contentInset.top,
-                          contentInset.left, contentInset.bottom, contentInset.right];
+  [debugText appendFormat:@"Content Inset:\n  t:%.1f l:%.1f\n  b:%.1f r:%.1f\n", 
+    contentInset.top, contentInset.left, contentInset.bottom, contentInset.right];
   [debugText appendString:@"\n"];
-  [debugText appendFormat:@"Drawing Bounds:\n  x:%.1f y:%.1f\n  w:%.1f h:%.1f\n",
-                          drawingBounds.origin.x, drawingBounds.origin.y, drawingBounds.size.width,
-                          drawingBounds.size.height];
+  [debugText appendFormat:@"Drawing Bounds:\n  x:%.1f y:%.1f\n  w:%.1f h:%.1f\n", 
+    drawingBounds.origin.x, drawingBounds.origin.y, 
+    drawingBounds.size.width, drawingBounds.size.height];
   [debugText appendString:@"\n"];
-  [debugText appendFormat:@"Scaled Drawing:\n  x:%.1f y:%.1f\n  w:%.1f h:%.1f\n",
-                          scaledDrawingBounds.origin.x, scaledDrawingBounds.origin.y,
-                          scaledDrawingBounds.size.width, scaledDrawingBounds.size.height];
+  [debugText appendFormat:@"Scaled Drawing:\n  x:%.1f y:%.1f\n  w:%.1f h:%.1f\n", 
+    scaledDrawingBounds.origin.x, scaledDrawingBounds.origin.y, 
+    scaledDrawingBounds.size.width, scaledDrawingBounds.size.height];
   [debugText appendString:@"\n"];
   [debugText appendFormat:@"Visible Origin:\n  (%.1f, %.1f)\n", visibleOrigin.x, visibleOrigin.y];
   [debugText appendString:@"\n"];
   [debugText appendFormat:@"InfiniteScroll: %@\n", _allowInfiniteScroll ? @"YES" : @"NO"];
-
+  
   _debugLabel.text = debugText;
-
+  
   // Size the label to fit content with padding
   CGSize maxSize = CGSizeMake(220, CGFLOAT_MAX);
   CGSize textSize = [debugText boundingRectWithSize:maxSize
                                             options:NSStringDrawingUsesLineFragmentOrigin
-                                         attributes:@{NSFontAttributeName : _debugLabel.font}
-                                            context:nil]
-                        .size;
-
+                                         attributes:@{NSFontAttributeName: _debugLabel.font}
+                                            context:nil].size;
+  
   CGFloat padding = 8;
   CGFloat labelWidth = textSize.width + padding * 2;
   CGFloat labelHeight = textSize.height + padding * 2;
-
+  
   // Position in top right corner
   CGFloat xPos = self.bounds.size.width - labelWidth - 10;
   CGFloat yPos = 10;
-
+  
   _debugLabel.frame = CGRectMake(xPos, yPos, labelWidth, labelHeight);
-
+  
   // Add inner padding by adjusting text rect
   _debugLabel.textAlignment = NSTextAlignmentLeft;
-
+  
   // Adjust attributed string for padding
-  NSMutableParagraphStyle* paragraphStyle = [[NSMutableParagraphStyle alloc] init];
+  NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
   paragraphStyle.headIndent = padding;
   paragraphStyle.firstLineHeadIndent = padding;
   paragraphStyle.tailIndent = -padding;
-
-  NSAttributedString* attributedText =
-      [[NSAttributedString alloc] initWithString:debugText
-                                      attributes:@{
-                                        NSFontAttributeName : _debugLabel.font,
-                                        NSForegroundColorAttributeName : _debugLabel.textColor,
-                                        NSParagraphStyleAttributeName : paragraphStyle
-                                      }];
-
+  
+  NSAttributedString *attributedText = [[NSAttributedString alloc] 
+    initWithString:debugText 
+    attributes:@{
+      NSFontAttributeName: _debugLabel.font,
+      NSForegroundColorAttributeName: _debugLabel.textColor,
+      NSParagraphStyleAttributeName: paragraphStyle
+    }];
+  
   _debugLabel.attributedText = attributedText;
 }
 
-- (void)scrollViewWillBeginZooming:(UIScrollView*)scrollView withView:(UIView*)view {
-  // Clear content inset when zooming begins to avoid interference
-  _lastEdgeInsets = (UIEdgeInsets){.top = _view.contentInset.top / _view.zoomScale,
-                                   .left = _view.contentInset.left / _view.zoomScale,
-                                   .bottom = _view.contentInset.bottom / _view.zoomScale,
-                                   .right = _view.contentInset.right / _view.zoomScale};
-  _view.contentInset = UIEdgeInsetsZero;
+- (void)scrollViewWillBeginZooming:(UIScrollView *)scrollView withView:(UIView *)view
+{
+    // Clear content inset when zooming begins to avoid interference
+    _lastEdgeInsets = (UIEdgeInsets){
+        .top    = _view.contentInset.top / _view.zoomScale,
+        .left   = _view.contentInset.left / _view.zoomScale,
+        .bottom = _view.contentInset.bottom / _view.zoomScale,
+        .right  = _view.contentInset.right / _view.zoomScale
+    };
+    _view.contentInset = UIEdgeInsetsZero;
 }
 
-- (void)scrollViewDidEndZooming:(UIScrollView*)scrollView
-                       withView:(UIView*)view
-                        atScale:(CGFloat)scale {
-  // Restore content inset when zooming ends
-  // [self updateContentInset];
-  // _view.contentInset = (UIEdgeInsets){
-  //     .top    = _lastEdgeInsets.top * _view.zoomScale,
-  //     .left   = _lastEdgeInsets.left * _view.zoomScale,
-  //     .bottom = _lastEdgeInsets.bottom * _view.zoomScale,
-  //     .right  = _lastEdgeInsets.right * _view.zoomScale
-  // };
-  [self updateContentInset];
+- (void)scrollViewDidEndZooming:(UIScrollView *)scrollView withView:(UIView *)view atScale:(CGFloat)scale
+{
+    // Restore content inset when zooming ends
+    // [self updateContentInset];
+    // _view.contentInset = (UIEdgeInsets){
+    //     .top    = _lastEdgeInsets.top * _view.zoomScale,
+    //     .left   = _lastEdgeInsets.left * _view.zoomScale,
+    //     .bottom = _lastEdgeInsets.bottom * _view.zoomScale,
+    //     .right  = _lastEdgeInsets.right * _view.zoomScale
+    // };
+    [self updateContentInset];
 }
 
-- (void)scrollViewDidZoom:(UIScrollView*)scrollView {
-  // Update background image size to match zoom level
-  if (_backgroundImageView) {
-    CGFloat scale = _view.zoomScale;
-    _backgroundImageView.frame = CGRectMake(0, 0, 20000 * scale, 20000 * scale);
-  }
+- (void)scrollViewDidZoom:(UIScrollView *)scrollView
+{
+    // Update background image size to match zoom level
+    if (_backgroundImageView) {
+        CGFloat scale = _view.zoomScale;
+        _backgroundImageView.frame = CGRectMake(0, 0, 20000 * scale, 20000 * scale);
+    }
 }
 
 - (UIImage*)loadImageFromPath:(NSString*)imagePath {
-  UIImage* image = nil;
-
-  // Check if it's a base64 encoded image
-  if ([imagePath hasPrefix:@"data:image/"]) {
-    NSRange commaRange = [imagePath rangeOfString:@","];
-    if (commaRange.location != NSNotFound) {
-      NSString* base64String = [imagePath substringFromIndex:commaRange.location + 1];
-      NSData* imageData =
-          [[NSData alloc] initWithBase64EncodedString:base64String
-                                              options:NSDataBase64DecodingIgnoreUnknownCharacters];
-      if (imageData) {
-        image = [UIImage imageWithData:imageData];
-      }
+    UIImage* image = nil;
+    
+    // Check if it's a base64 encoded image
+    if ([imagePath hasPrefix:@"data:image/"]) {
+        NSRange commaRange = [imagePath rangeOfString:@","];
+        if (commaRange.location != NSNotFound) {
+            NSString* base64String = [imagePath substringFromIndex:commaRange.location + 1];
+            NSData* imageData = [[NSData alloc] initWithBase64EncodedString:base64String 
+                                                                   options:NSDataBase64DecodingIgnoreUnknownCharacters];
+            if (imageData) {
+                image = [UIImage imageWithData:imageData];
+            }
+        }
+    } else {
+        // Try loading as a file path or resource name
+        image = [UIImage imageNamed:imagePath];
+        if (!image) {
+            image = [UIImage imageWithContentsOfFile:imagePath];
+        }
     }
-  } else {
-    // Try loading as a file path or resource name
-    image = [UIImage imageNamed:imagePath];
-    if (!image) {
-      image = [UIImage imageWithContentsOfFile:imagePath];
-    }
-  }
-
-  return image;
+    
+    return image;
 }
 
 - (void)updateProps:(Props::Shared const&)props oldProps:(Props::Shared const&)oldProps {
@@ -337,25 +343,25 @@ getEmitter(const SharedViewEventEmitter emitter) {
   }
 
   if (prev.allowInfiniteScroll ^ next.allowInfiniteScroll) {
-    _allowInfiniteScroll = next.allowInfiniteScroll;
-    if (next.allowInfiniteScroll) {
-      _view.contentSize = CGSizeMake(20000, 20000);
-    } else {
-      _view.contentSize = CGSizeMake(_view.bounds.size.width, _view.bounds.size.height);
-    }
-    [self updateContentInset];
+      _allowInfiniteScroll = next.allowInfiniteScroll;
+      if (next.allowInfiniteScroll) {
+          _view.contentSize = CGSizeMake(20000, 20000);
+      } else {
+          _view.contentSize = CGSizeMake(_view.bounds.size.width,_view.bounds.size.height);
+      }
+      [self updateContentInset];
   }
 
   if (prev.minimumZoomScale != next.minimumZoomScale)
     _view.minimumZoomScale = next.minimumZoomScale;
 
-  if (prev.maximumZoomScale != next.maximumZoomScale)
+  if (prev.maximumZoomScale != next.maximumZoomScale) 
     _view.maximumZoomScale = next.maximumZoomScale;
 
   if (prev.showDebugInfo ^ next.showDebugInfo) {
     _showDebugInfo = next.showDebugInfo;
     _debugLabel.hidden = !next.showDebugInfo;
-
+    
     if (next.showDebugInfo) {
       [self startDebugUpdates];
       [self updateDebugInfo];
@@ -366,7 +372,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
 
   if (prev.showLinedPaper ^ next.showLinedPaper) {
     _showLinedPaper = next.showLinedPaper;
-
+    
     if (next.showLinedPaper) {
       // Enable background image
       [self setupBackgroundImage];
@@ -379,12 +385,14 @@ getEmitter(const SharedViewEventEmitter emitter) {
     }
   }
 
+
+
   [super updateProps:props oldProps:oldProps];
 }
 
 - (void)layoutSubviews {
   [super layoutSubviews];
-
+  
   if (_showDebugInfo) {
     [self updateDebugInfo];
     // Ensure debug label stays on top
@@ -392,66 +400,81 @@ getEmitter(const SharedViewEventEmitter emitter) {
   }
 }
 
+  
+
 - (void)updateContentInset {
-  // don't bother if the allowInfiniteScroll prop isn't set
-  if (!_allowInfiniteScroll) {
-    return;
-  }
+    // don't bother if the allowInfiniteScroll prop isn't set
+    if (!_allowInfiniteScroll) {
+      return;
+    }
 
-  const CGFloat z = MAX(_view.zoomScale, 0.0001);
+    const CGFloat z = MAX(_view.zoomScale, 0.0001);
 
-  // Visible size in content coordinates
-  const CGSize viewportInContent = (CGSize){_view.bounds.size.width, _view.bounds.size.height};
+    // Visible size in content coordinates
+    const CGSize viewportInContent = (CGSize){
+        _view.bounds.size.width,
+        _view.bounds.size.height
+    };
 
-  // ✅ Correct: visible origin must include contentInset
-  const CGPoint visibleOriginInContent = (CGPoint){_view.bounds.origin.x, _view.bounds.origin.y};
+    // ✅ Correct: visible origin must include contentInset
+    const CGPoint visibleOriginInContent = (CGPoint){
+      _view.bounds.origin.x,
+      _view.bounds.origin.y
+    };
 
-  const CGRect visible = (CGRect){visibleOriginInContent, viewportInContent};
+    const CGRect visible = (CGRect){ visibleOriginInContent, viewportInContent };
 
-  if (CGSizeEqualToSize(_view.drawing.bounds.size, CGSizeZero)) {
-    // Center an empty canvas using viewportInContent, not raw bounds
-    const CGFloat leftInset = (_view.contentSize.width - viewportInContent.width) / 2.0;
-    const CGFloat topInset = (_view.contentSize.height - viewportInContent.height) / 2.0;
+    if (CGSizeEqualToSize(_view.drawing.bounds.size, CGSizeZero)) {
+        // Center an empty canvas using viewportInContent, not raw bounds
+        const CGFloat leftInset = (_view.contentSize.width  - viewportInContent.width)  / 2.0;
+        const CGFloat topInset  = (_view.contentSize.height - viewportInContent.height) / 2.0;
+
+        _view.contentInset = (UIEdgeInsets){
+            .top    = -topInset,
+            .left   = -leftInset,
+            .bottom = -topInset,
+            .right  = -leftInset,
+        };
+        return;
+    }
+
+    const CGRect drawing = (CGRect){
+        .origin = (CGPoint){
+            _view.drawing.bounds.origin.x * _view.zoomScale,
+            _view.drawing.bounds.origin.y * _view.zoomScale
+        },
+        .size = (CGSize){
+            _view.drawing.bounds.size.width * _view.zoomScale,
+            _view.drawing.bounds.size.height * _view.zoomScale
+        }
+    };
+
+    // One-viewport padding (in content coordinates)
+    const CGFloat padX = viewportInContent.width;
+    const CGFloat padY = viewportInContent.height;
+
+    // Expand the ink bounds symmetrically
+    const CGRect expanded = CGRectInset(drawing, -padX, -padY);
+
+    // Include what's currently on screen (correctly measured)
+    CGRect finalContentBounds = CGRectUnion(expanded, visible);
+    
+
+    // (Optional) Keep bounds inside contentSize to avoid pathological insets
+    finalContentBounds.origin.x = MAX(0, finalContentBounds.origin.x);
+    finalContentBounds.origin.y = MAX(0, finalContentBounds.origin.y);
+    finalContentBounds.size.width  = MIN(finalContentBounds.size.width,
+                                         _view.contentSize.width  - finalContentBounds.origin.x);
+    finalContentBounds.size.height = MIN(finalContentBounds.size.height,
+                                         _view.contentSize.height - finalContentBounds.origin.y);
 
     _view.contentInset = (UIEdgeInsets){
-        .top = -topInset,
-        .left = -leftInset,
-        .bottom = -topInset,
-        .right = -leftInset,
+        .top    = -finalContentBounds.origin.y,
+        .left   = -finalContentBounds.origin.x,
+        .bottom = -(_view.contentSize.height - CGRectGetMaxY(finalContentBounds)),
+        .right  = -(_view.contentSize.width  - CGRectGetMaxX(finalContentBounds)),
     };
-    return;
-  }
-
-  const CGRect drawing =
-      (CGRect){.origin = (CGPoint){_view.drawing.bounds.origin.x * _view.zoomScale,
-                                   _view.drawing.bounds.origin.y * _view.zoomScale},
-               .size = (CGSize){_view.drawing.bounds.size.width * _view.zoomScale,
-                                _view.drawing.bounds.size.height * _view.zoomScale}};
-
-  // One-viewport padding (in content coordinates)
-  const CGFloat padX = viewportInContent.width;
-  const CGFloat padY = viewportInContent.height;
-
-  // Expand the ink bounds symmetrically
-  const CGRect expanded = CGRectInset(drawing, -padX, -padY);
-
-  // Include what's currently on screen (correctly measured)
-  CGRect finalContentBounds = CGRectUnion(expanded, visible);
-
-  // (Optional) Keep bounds inside contentSize to avoid pathological insets
-  finalContentBounds.origin.x = MAX(0, finalContentBounds.origin.x);
-  finalContentBounds.origin.y = MAX(0, finalContentBounds.origin.y);
-  finalContentBounds.size.width =
-      MIN(finalContentBounds.size.width, _view.contentSize.width - finalContentBounds.origin.x);
-  finalContentBounds.size.height =
-      MIN(finalContentBounds.size.height, _view.contentSize.height - finalContentBounds.origin.y);
-
-  _view.contentInset = (UIEdgeInsets){
-      .top = -finalContentBounds.origin.y,
-      .left = -finalContentBounds.origin.x,
-      .bottom = -(_view.contentSize.height - CGRectGetMaxY(finalContentBounds)),
-      .right = -(_view.contentSize.width - CGRectGetMaxX(finalContentBounds)),
-  };
+    
 }
 
 - (void)clearUndoStack {
@@ -483,10 +506,10 @@ getEmitter(const SharedViewEventEmitter emitter) {
 - (NSDictionary*)getDrawingBounds {
   CGRect bounds = _view.drawing.bounds;
   return @{
-    @"x" : @(bounds.origin.x),
-    @"y" : @(bounds.origin.y),
-    @"width" : @(bounds.size.width),
-    @"height" : @(bounds.size.height)
+    @"x": @(bounds.origin.x),
+    @"y": @(bounds.origin.y),
+    @"width": @(bounds.size.width),
+    @"height": @(bounds.size.height)
   };
 }
 
@@ -494,29 +517,21 @@ getEmitter(const SharedViewEventEmitter emitter) {
 //   return [self getBase64PngData:scale x:0 y:0 width:0 height:0];
 // }
 
-- (NSString*)getBase64PngData:(double)scale
-                            x:(double)x
-                            y:(double)y
-                        width:(double)width
-                       height:(double)height {
+- (NSString*)getBase64PngData:(double)scale x:(double)x y:(double)y width:(double)width height:(double)height {
   NSData* data = _view.drawing.dataRepresentation;
   if (!data) {
     return nil;
   }
-
+  
   CGRect rect;
   if (width > 0 && height > 0) {
-
-    rect = CGRectMake((_view.bounds.origin.x + x) / _view.zoomScale,
-                      (_view.bounds.origin.y + y) / _view.zoomScale, width / _view.zoomScale,
-                      height / _view.zoomScale);
+    
+    rect = CGRectMake((_view.bounds.origin.x + x ) / _view.zoomScale, (_view.bounds.origin.y + y ) / _view.zoomScale, width / _view.zoomScale, height / _view.zoomScale);
   } else {
     // Use the default bounds
-    rect = CGRectMake(
-        _view.bounds.origin.x / _view.zoomScale, _view.bounds.origin.y / _view.zoomScale,
-        _view.bounds.size.width / _view.zoomScale, _view.bounds.size.height / _view.zoomScale);
+    rect = CGRectMake(_view.bounds.origin.x / _view.zoomScale, _view.bounds.origin.y / _view.zoomScale, _view.bounds.size.width / _view.zoomScale, _view.bounds.size.height / _view.zoomScale);
   }
-
+  
   UIImage* image = [_view.drawing imageFromRect:rect
                                           scale:scale == 0 ? UIScreen.mainScreen.scale : scale];
   NSData* imageData = UIImagePNGRepresentation(image);
@@ -597,24 +612,20 @@ getEmitter(const SharedViewEventEmitter emitter) {
   [newView setBackgroundColor:v.backgroundColor];
   [newView setDrawingPolicy:v.drawingPolicy];
   [newView setOpaque:v.isOpaque];
-  newView.contentSize =
-      CGSizeMake(v.contentSize.width / v.zoomScale, v.contentSize.height / v.zoomScale);
+  newView.contentSize = CGSizeMake(v.contentSize.width / v.zoomScale, v.contentSize.height / v.zoomScale);
   newView.contentInset = v.contentInset;
   newView.minimumZoomScale = v.minimumZoomScale;
   newView.maximumZoomScale = v.maximumZoomScale;
   newView.zoomScale = v.zoomScale;
   newView.bounds = v.bounds;
   newView.delegate = self;
-
+  
   // Setup background image for the new canvas
   if (_showLinedPaper) {
-    UIImage* backgroundImage = [UIImage imageNamed:@"pencilkit_background"
-                                          inBundle:[NSBundle bundleForClass:[self class]]
-                     compatibleWithTraitCollection:nil];
+    UIImage* backgroundImage = [UIImage imageNamed:@"pencilkit_background" inBundle:[NSBundle bundleForClass:[self class]] compatibleWithTraitCollection:nil];
     if (backgroundImage) {
       CGFloat scale = newView.zoomScale;
-      UIImageView* newBackgroundImageView =
-          [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 20000 * scale, 20000 * scale)];
+      UIImageView* newBackgroundImageView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 20000 * scale, 20000 * scale)];
       newBackgroundImageView.image = backgroundImage;
       newBackgroundImageView.contentMode = UIViewContentModeScaleToFill;
       newBackgroundImageView.userInteractionEnabled = NO;
@@ -623,14 +634,14 @@ getEmitter(const SharedViewEventEmitter emitter) {
       _backgroundImageView = newBackgroundImageView;
     }
   }
-
+  
   // ── Copy Pencil double-tap interaction (2nd-gen Pencil or Apple Pencil Pro) ──
   if (@available(iOS 12.1, *)) {
     UIPencilInteraction* pencilInteraction = [[UIPencilInteraction alloc] init];
     pencilInteraction.delegate = self;
-    [newView addInteraction:pencilInteraction];
+    [newView addInteraction:pencilInteraction]; 
   }
-
+  
   [_toolPicker removeObserver:v];
   [_toolPicker addObserver:newView];
   [_toolPicker setVisible:true forFirstResponder:newView];
@@ -724,10 +735,10 @@ getEmitter(const SharedViewEventEmitter emitter) {
   }
 }
 
-- (NSString*)getTool {
-  PKTool* currentTool = _view.tool;
+- (NSString *)getTool {
+  PKTool *currentTool = _view.tool;
   if ([currentTool isKindOfClass:[PKInkingTool class]]) {
-    PKInkingTool* inkingTool = (PKInkingTool*)currentTool;
+    PKInkingTool *inkingTool = (PKInkingTool *)currentTool;
     if (inkingTool.inkType == PKInkTypePen) {
       return @"pen";
     } else if (inkingTool.inkType == PKInkTypePencil) {
@@ -742,7 +753,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
       return @"crayon";
     }
   } else if ([currentTool isKindOfClass:[PKEraserTool class]]) {
-    PKEraserTool* eraserTool = (PKEraserTool*)currentTool;
+    PKEraserTool *eraserTool = (PKEraserTool *)currentTool;
     if (eraserTool.eraserType == PKEraserTypeVector) {
       return @"eraserVector";
     } else if (eraserTool.eraserType == PKEraserTypeBitmap) {
@@ -755,6 +766,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
   }
   return @"unknown";
 }
+
 
 @end
 
@@ -806,7 +818,9 @@ getEmitter(const SharedViewEventEmitter emitter) {
 @end
 
 @implementation RNPencilKit (UIPencilInteractionDelegate)
-- (void)pencilInteractionDidTap:(UIPencilInteraction*)interaction API_AVAILABLE(ios(12.1)) {
+- (void)pencilInteractionDidTap:(UIPencilInteraction *)interaction
+    API_AVAILABLE(ios(12.1))
+{
   if (auto e = getEmitter(_eventEmitter)) {
     e->onPencilDoubleTap({});
   }
