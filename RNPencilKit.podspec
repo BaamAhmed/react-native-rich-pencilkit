@@ -15,6 +15,7 @@ Pod::Spec.new do |s|
   s.source       = { :git => "https://github.com/BaamAhmed/react-native-rich-pencilkit.git", :tag => "#{s.version}" }
 
   s.source_files = "ios/**/*.{h,m,mm}"
+  s.resources = "ios/Resources/**/*.png"
   s.frameworks   = "PencilKit"
 
   # Use install_modules_dependencies helper to install the dependencies if React Native version >=0.71.0.
