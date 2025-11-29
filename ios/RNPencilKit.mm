@@ -26,9 +26,9 @@ getEmitter(const SharedViewEventEmitter emitter) {
     _isolatedUndoManager = [NSUndoManager new];
     _isolatedUndoManager.levelsOfUndo = 128; // tune as needed
 
-        // Prevent iOS from automatically scrolling to top
+    // Prevent iOS from automatically scrolling to top
     self.scrollsToTop = NO;
-    
+
     // Prevent iOS from adjusting content insets automatically
     if (@available(iOS 11.0, *)) {
       self.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
@@ -36,7 +36,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
   }
   return self;
 }
-- (NSUndoManager *)undoManager {
+- (NSUndoManager*)undoManager {
   return _isolatedUndoManager;
 }
 
