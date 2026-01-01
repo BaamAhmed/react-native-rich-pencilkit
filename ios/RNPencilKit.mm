@@ -63,6 +63,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
   UIEdgeInsets _lastEdgeInsets;
   BOOL _allowInfiniteScroll;
   UILabel* _Nullable _debugLabel;
+  RNPencilKitInfiniteScrollDirection _infScrollDir;
   BOOL _showDebugInfo;
   CADisplayLink* _Nullable _displayLink;
   UIImageView* _Nullable _backgroundImageView;
@@ -75,6 +76,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
     _props = defaultProps;
     _view = [[PKIsolatedCanvasView alloc] initWithFrame:frame];
     _view.backgroundColor = [UIColor clearColor];
+    _view.bouncesZoom = NO;
 
     _view.delegate = self;
     _toolPicker = [[PKToolPicker alloc] init];
@@ -229,6 +231,13 @@ getEmitter(const SharedViewEventEmitter emitter) {
   [debugText appendFormat:@"Visible Origin:\n  (%.1f, %.1f)\n", visibleOrigin.x, visibleOrigin.y];
   [debugText appendString:@"\n"];
   [debugText appendFormat:@"InfiniteScroll: %@\n", _allowInfiniteScroll ? @"YES" : @"NO"];
+  NSString* scrollDirStr = @"bidirectional";
+  if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Vertical) {
+    scrollDirStr = @"vertical";
+  } else if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Horizontal) {
+    scrollDirStr = @"horizontal";
+  }
+  [debugText appendFormat:@"ScrollDir: %@\n", scrollDirStr];
 
   _debugLabel.text = debugText;
 
@@ -271,29 +280,25 @@ getEmitter(const SharedViewEventEmitter emitter) {
 }
 
 - (void)scrollViewWillBeginZooming:(UIScrollView*)scrollView withView:(UIView*)view {
-  // Clear content inset when zooming begins to avoid interference
-  _lastEdgeInsets = (UIEdgeInsets){.top = _view.contentInset.top / _view.zoomScale,
-                                   .left = _view.contentInset.left / _view.zoomScale,
-                                   .bottom = _view.contentInset.bottom / _view.zoomScale,
-                                   .right = _view.contentInset.right / _view.zoomScale};
-  _view.contentInset = UIEdgeInsetsZero;
+  _lastEdgeInsets = _view.contentInset;
+  if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Bidirectional)
+    _view.contentInset = UIEdgeInsetsZero;
 }
 
 - (void)scrollViewDidEndZooming:(UIScrollView*)scrollView
                        withView:(UIView*)view
                         atScale:(CGFloat)scale {
-  // Restore content inset when zooming ends
-  // [self updateContentInset];
-  // _view.contentInset = (UIEdgeInsets){
-  //     .top    = _lastEdgeInsets.top * _view.zoomScale,
-  //     .left   = _lastEdgeInsets.left * _view.zoomScale,
-  //     .bottom = _lastEdgeInsets.bottom * _view.zoomScale,
-  //     .right  = _lastEdgeInsets.right * _view.zoomScale
-  // };
+
   [self updateContentInset];
 }
 
 - (void)scrollViewDidZoom:(UIScrollView*)scrollView {
+  // Update insets to match zoom level
+  if (_allowInfiniteScroll && _infScrollDir == RNPencilKitInfiniteScrollDirection::Vertical) {
+    _view.contentInset = UIEdgeInsetsMake(_lastEdgeInsets.top / _view.zoomScale,
+                                          _lastEdgeInsets.left / _view.zoomScale, 0,
+                                          _lastEdgeInsets.right / _view.zoomScale);
+  }
   // Update background image size to match zoom level
   if (_backgroundImageView) {
     CGFloat scale = _view.zoomScale;
@@ -353,14 +358,14 @@ getEmitter(const SharedViewEventEmitter emitter) {
   if (prev.backgroundColor ^ next.backgroundColor) {
     [_view setBackgroundColor:intToColor(next.backgroundColor)];
   }
-
+  if (prev.infiniteScrollDirection != next.infiniteScrollDirection) {
+    _infScrollDir = next.infiniteScrollDirection;
+    [self applyContentSizeForInfiniteScroll];
+    [self updateContentInset];
+  }
   if (prev.allowInfiniteScroll ^ next.allowInfiniteScroll) {
     _allowInfiniteScroll = next.allowInfiniteScroll;
-    if (next.allowInfiniteScroll) {
-      _view.contentSize = CGSizeMake(20000, 20000);
-    } else {
-      _view.contentSize = CGSizeMake(_view.bounds.size.width, _view.bounds.size.height);
-    }
+    [self applyContentSizeForInfiniteScroll];
     [self updateContentInset];
   }
 
@@ -400,8 +405,40 @@ getEmitter(const SharedViewEventEmitter emitter) {
   [super updateProps:props oldProps:oldProps];
 }
 
+- (void)applyContentSizeForInfiniteScroll {
+  _view.zoomScale = 1;
+  CGFloat width = _view.bounds.size.width;
+  CGFloat height = _view.bounds.size.height;
+
+  // Don't set contentSize if bounds aren't valid yet - will be called again in layoutSubviews
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+
+  CGSize newContentSize;
+  if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Bidirectional) {
+    newContentSize = CGSizeMake(20000, 20000);
+  } else if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Vertical) {
+    newContentSize = CGSizeMake(width, 20000);
+  } else if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Horizontal) {
+    newContentSize = CGSizeMake(20000, height);
+  } else {
+    // Default fallback
+    newContentSize = CGSizeMake(20000, 20000);
+  }
+
+  // Only update if the content size actually changed to avoid unnecessary updates
+  if (!CGSizeEqualToSize(_view.contentSize, newContentSize)) {
+    _view.contentSize = newContentSize;
+    [self updateContentInset];
+  }
+}
+
 - (void)layoutSubviews {
   [super layoutSubviews];
+
+  if (_allowInfiniteScroll)
+    [self applyContentSizeForInfiniteScroll];
 
   if (_showDebugInfo) {
     [self updateDebugInfo];
@@ -419,24 +456,37 @@ getEmitter(const SharedViewEventEmitter emitter) {
   const CGFloat z = MAX(_view.zoomScale, 0.0001);
 
   // Visible size in content coordinates
-  const CGSize viewportInContent = (CGSize){_view.bounds.size.width, _view.bounds.size.height};
+  const CGSize viewportInContent = _view.bounds.size;
 
-  // ✅ Correct: visible origin must include contentInset
   const CGPoint visibleOriginInContent = (CGPoint){_view.bounds.origin.x, _view.bounds.origin.y};
 
   const CGRect visible = (CGRect){visibleOriginInContent, viewportInContent};
 
   if (CGSizeEqualToSize(_view.drawing.bounds.size, CGSizeZero)) {
-    // Center an empty canvas using viewportInContent, not raw bounds
-    const CGFloat leftInset = (_view.contentSize.width - viewportInContent.width) / 2.0;
-    const CGFloat topInset = (_view.contentSize.height - viewportInContent.height) / 2.0;
+    if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Vertical) {
+      // if we want to scroll vertically, we must set negative insets on the bottom to allow
+      // progressive unlocking, and a positive offset on the top to make the page appear below the
+      // top edge of the screen
+      _view.contentInset =
+          (UIEdgeInsets){.top = 0,
+                         .left = 0,
+                         .bottom = _view.contentSize.height - viewportInContent.height,
+                         .right = 0};
 
-    _view.contentInset = (UIEdgeInsets){
-        .top = -topInset,
-        .left = -leftInset,
-        .bottom = -topInset,
-        .right = -leftInset,
-    };
+      _view.contentOffset = (CGPoint){.x = 0, .y = viewportInContent.height / 3.0};
+
+    } else {
+      // Center an empty canvas using viewportInContent, not raw bounds
+      const CGFloat leftInset = (_view.contentSize.width - viewportInContent.width) / 2.0;
+      const CGFloat topInset = (_view.contentSize.height - viewportInContent.height) / 2.0;
+
+      _view.contentInset = (UIEdgeInsets){
+          .top = -topInset,
+          .left = -leftInset,
+          .bottom = -topInset,
+          .right = -leftInset,
+      };
+    }
     return;
   }
 
@@ -450,8 +500,11 @@ getEmitter(const SharedViewEventEmitter emitter) {
   const CGFloat padX = viewportInContent.width;
   const CGFloat padY = viewportInContent.height;
 
-  // Expand the ink bounds symmetrically
-  const CGRect expanded = CGRectInset(drawing, -padX, -padY);
+  // Expand bounds based on infinite scroll direction
+  const CGRect expanded = _infScrollDir == RNPencilKitInfiniteScrollDirection::Vertical
+                              ? CGRectMake(drawing.origin.x, drawing.origin.y, drawing.size.width,
+                                           drawing.size.height + padY)
+                              : CGRectInset(drawing, -padX, -padY);
 
   // Include what's currently on screen (correctly measured)
   CGRect finalContentBounds = CGRectUnion(expanded, visible);
@@ -464,12 +517,26 @@ getEmitter(const SharedViewEventEmitter emitter) {
   finalContentBounds.size.height =
       MIN(finalContentBounds.size.height, _view.contentSize.height - finalContentBounds.origin.y);
 
-  _view.contentInset = (UIEdgeInsets){
-      .top = -finalContentBounds.origin.y,
-      .left = -finalContentBounds.origin.x,
-      .bottom = -(_view.contentSize.height - CGRectGetMaxY(finalContentBounds)),
-      .right = -(_view.contentSize.width - CGRectGetMaxX(finalContentBounds)),
-  };
+  if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Vertical) {
+    CGFloat horizontallyCenteringInset =
+        finalContentBounds.size.width < viewportInContent.width
+            ? ((viewportInContent.width - finalContentBounds.size.width) / 2.0)
+            : 0;
+
+    _view.contentInset = (UIEdgeInsets){
+        .top = -finalContentBounds.origin.y + (viewportInContent.height / 3.0),
+        .left = horizontallyCenteringInset,
+        .bottom = -(_view.contentSize.height - CGRectGetMaxY(finalContentBounds)),
+        .right = horizontallyCenteringInset,
+    };
+  } else {
+    _view.contentInset = (UIEdgeInsets){
+        .top = -finalContentBounds.origin.y,
+        .left = -finalContentBounds.origin.x,
+        .bottom = -(_view.contentSize.height - CGRectGetMaxY(finalContentBounds)),
+        .right = -(_view.contentSize.width - CGRectGetMaxX(finalContentBounds)),
+    };
+  }
 }
 
 - (void)clearUndoStack {

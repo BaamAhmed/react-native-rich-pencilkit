@@ -38,6 +38,10 @@ export interface NativeProps extends ViewProps {
   contentAreaBorderColor?: Int32;
   contentAreaBackgroundColor?: Int32;
   allowInfiniteScroll?: boolean;
+  infiniteScrollDirection?: WithDefault<
+    'bidirectional' | 'vertical' | 'horizontal',
+    'bidirectional'
+  >;
   showDebugInfo?: boolean;
   showLinedPaper?: boolean;
 
