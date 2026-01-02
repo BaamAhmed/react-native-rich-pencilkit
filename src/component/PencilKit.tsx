@@ -3,36 +3,15 @@ import { type ColorValue, Text, type ViewProps } from 'react-native';
 import type { DirectEventHandler, WithDefault } from 'react-native/Libraries/Types/CodegenTypes';
 
 export type PencilKitProps = {
-  alwaysBounceVertical?: boolean;
-  alwaysBounceHorizontal?: boolean;
   isRulerActive?: boolean;
-  backgroundColor?: ColorValue;
   drawingPolicy?: WithDefault<'default' | 'anyinput' | 'pencilonly', 'default'>;
   isOpaque?: boolean;
-  contentSize?: {
-    width: number;
-    height: number;
-  };
 
   // zoom/pan props
   minimumZoomScale?: number;
   maximumZoomScale?: number;
-  contentAlignmentPoint?: {
-    x: number;
-    y: number;
-  };
-  contentInset?: {
-    top: number;
-    right: number;
-    bottom: number;
-    left: number;
-  };
-
-  // drawingArea props
-  contentAreaBorderWidth?: number;
-  contentAreaBorderColor?: ColorValue;
-  contentAreaBackgroundColor?: ColorValue;
-  pageBackgroundImage?: string;
+  alwaysBounceVertical?: boolean;
+  alwaysBounceHorizontal?: boolean;
 
   allowInfiniteScroll?: boolean;
   infiniteScrollDirection?: WithDefault<
@@ -40,7 +19,9 @@ export type PencilKitProps = {
     'bidirectional'
   >;
   showDebugInfo?: boolean;
-  showLinedPaper?: boolean;
+
+  paperTemplate?: WithDefault<'blank' | 'lined' | 'dotted' | 'grid', 'blank'>;
+  backgroundColor?: ColorValue;
 
   onToolPickerVisibilityDidChange?: DirectEventHandler<{}>;
   onToolPickerIsRulerActiveDidChange?: DirectEventHandler<{}>;

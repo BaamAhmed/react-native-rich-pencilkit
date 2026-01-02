@@ -15,6 +15,156 @@ getEmitter(const SharedViewEventEmitter emitter) {
   return std::static_pointer_cast<const RNPencilKitEventEmitter>(emitter);
 }
 
+// PaperTemplateView - view that draws paper backgrounds using CATiledLayer
+@interface PaperTemplateView : UIView
+@property(nonatomic, assign) RNPencilKitPaperTemplate templateType;
+@property(nonatomic, strong) UIColor* paperBackgroundColor;
+@property(nonatomic, assign) CGFloat zoomScale;
+- (instancetype)initWithFrame:(CGRect)frame
+                 templateType:(RNPencilKitPaperTemplate)templateType
+              backgroundColor:(UIColor*)backgroundColor;
+@end
+
+@implementation PaperTemplateView
+
++ (Class)layerClass {
+  return [CATiledLayer class];
+}
+
+- (instancetype)initWithFrame:(CGRect)frame
+                 templateType:(RNPencilKitPaperTemplate)templateType
+              backgroundColor:(UIColor*)backgroundColor {
+  if (self = [super initWithFrame:frame]) {
+    _templateType = templateType;
+    _paperBackgroundColor = backgroundColor ?: [UIColor clearColor];
+    _zoomScale = 1.0;
+
+    [_paperBackgroundColor setFill];
+    UIRectFill(frame);
+
+    CATiledLayer* tiledLayer = (CATiledLayer*)self.layer;
+    tiledLayer.tileSize = CGSizeMake(512, 512);
+    tiledLayer.levelsOfDetail = 1;
+    tiledLayer.levelsOfDetailBias = 0;
+  }
+  return self;
+}
+
+- (void)drawLined:(CGRect)rect {
+  CGFloat lineHeight = 24.0 * _zoomScale;
+  CGFloat lineThickness = 2.0 * _zoomScale;
+  CGFloat width = CGRectGetWidth(self.layer.bounds);
+
+  [[UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:1.0] setFill];
+  UIRectFill(rect);
+
+  [[UIColor colorWithRed:0.85 green:0.85 blue:0.9 alpha:1.0] setFill];
+
+  // Only draw lines that intersect the dirty rect
+  CGFloat startY = floor(rect.origin.y / lineHeight) * lineHeight;
+  CGFloat endY = CGRectGetMaxY(rect);
+
+  for (CGFloat y = startY; y < endY; y += lineHeight) {
+    CGRect lineRect = CGRectMake(0, y, width, lineThickness);
+    UIRectFill(lineRect);
+  }
+}
+
+- (void)drawDotted:(CGRect)rect {
+  CGFloat dotSpacing = 24.0 * _zoomScale;
+  CGFloat dotRadius = 2.0 * _zoomScale;
+
+  [[UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:1.0] setFill];
+  UIRectFill(rect);
+
+  [[UIColor colorWithRed:0.85 green:0.85 blue:0.9 alpha:1.0] setFill];
+
+  // Only draw dots that intersect the dirty rect
+  CGFloat startX = floor(rect.origin.x / dotSpacing) * dotSpacing;
+  CGFloat startY = floor(rect.origin.y / dotSpacing) * dotSpacing;
+  CGFloat endX = CGRectGetMaxX(rect);
+  CGFloat endY = CGRectGetMaxY(rect);
+
+  for (CGFloat y = startY; y < endY; y += dotSpacing) {
+    for (CGFloat x = startX; x < endX; x += dotSpacing) {
+      CGRect dotRect = CGRectMake(x - dotRadius, y - dotRadius, dotRadius * 2, dotRadius * 2);
+      UIBezierPath* dotPath = [UIBezierPath bezierPathWithOvalInRect:dotRect];
+      [dotPath fill];
+    }
+  }
+}
+
+- (void)drawGrid:(CGRect)rect {
+  CGFloat gridSpacing = 24.0 * _zoomScale;
+  CGFloat lineThickness = 1.0 * _zoomScale;
+  CGFloat width = CGRectGetWidth(self.layer.bounds);
+  CGFloat height = CGRectGetHeight(self.layer.bounds);
+
+  [[UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:1.0] setFill];
+  UIRectFill(rect);
+
+  [[UIColor colorWithRed:0.85 green:0.85 blue:0.9 alpha:1.0] setFill];
+
+  // Draw horizontal lines that intersect the dirty rect
+  CGFloat startY = floor(rect.origin.y / gridSpacing) * gridSpacing;
+  CGFloat endY = CGRectGetMaxY(rect);
+
+  for (CGFloat y = startY; y < endY; y += gridSpacing) {
+    CGRect lineRect = CGRectMake(0, y, width, lineThickness);
+    UIRectFill(lineRect);
+  }
+
+  // Draw vertical lines that intersect the dirty rect
+  CGFloat startX = floor(rect.origin.x / gridSpacing) * gridSpacing;
+  CGFloat endX = CGRectGetMaxX(rect);
+
+  for (CGFloat x = startX; x < endX; x += gridSpacing) {
+    CGRect lineRect = CGRectMake(x, 0, lineThickness, height);
+    UIRectFill(lineRect);
+  }
+}
+
+- (void)drawBorder:(CGRect)rect {
+  CGFloat borderWidth = 3.0 * _zoomScale;
+  UIColor* borderColor = [UIColor colorWithRed:0.8 green:0.8 blue:0.85 alpha:1.0];
+
+  [borderColor setStroke];
+  UIBezierPath* borderPath =
+      [UIBezierPath bezierPathWithRect:CGRectInset(self.bounds, borderWidth / 2, borderWidth / 2)];
+  borderPath.lineWidth = borderWidth;
+  // [_paperBackgroundColor setFill];
+  // [borderPath fill];
+  [borderPath stroke];
+}
+
+- (void)drawRect:(CGRect)rect {
+  // Fill background
+  // [_paperBackgroundColor setFill];
+  // UIRectFill(rect);
+  [self drawBorder:rect];
+
+  // Draw template pattern based on type
+  switch (_templateType) {
+    case RNPencilKitPaperTemplate::Lined:
+      [self drawLined:rect];
+      break;
+    case RNPencilKitPaperTemplate::Dotted:
+      [self drawDotted:rect];
+      break;
+    case RNPencilKitPaperTemplate::Grid:
+      [self drawGrid:rect];
+      break;
+    case RNPencilKitPaperTemplate::Blank:
+    default:
+      // No pattern for blank
+      break;
+  }
+
+  // Draw border around the view
+}
+
+@end
+
 // 1) Make an isolated canvas subclass
 @interface PKIsolatedCanvasView : PKCanvasView
 @property(nonatomic, strong) NSUndoManager* isolatedUndoManager;
@@ -64,10 +214,11 @@ getEmitter(const SharedViewEventEmitter emitter) {
   BOOL _allowInfiniteScroll;
   UILabel* _Nullable _debugLabel;
   RNPencilKitInfiniteScrollDirection _infScrollDir;
+  RNPencilKitPaperTemplate _paperTemplate;
   BOOL _showDebugInfo;
   CADisplayLink* _Nullable _displayLink;
   UIImageView* _Nullable _backgroundImageView;
-  BOOL _showLinedPaper;
+  UIView* _Nullable _paperTemplateView;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -99,8 +250,9 @@ getEmitter(const SharedViewEventEmitter emitter) {
       _toolPicker.selectedTool = defaultTool;
     }
 
+    [self setupPaperTemplateWithType:_paperTemplate backgroundColor:[UIColor whiteColor]];
     // Setup background image before setting contentView
-    [self setupBackgroundImage];
+    // [self setupBackgroundImage];
 
     self.contentView = _view;
 
@@ -141,31 +293,47 @@ getEmitter(const SharedViewEventEmitter emitter) {
   [self addSubview:_debugLabel];
 }
 
-- (void)setupBackgroundImage {
-  // Only setup if showLinedPaper is enabled
-  if (!_showLinedPaper) {
-    return;
+- (void)setupPaperTemplateWithType:(RNPencilKitPaperTemplate)templateType
+                   backgroundColor:(UIColor*)backgroundColor {
+  // Remove the previous paperTemplateView if it exists
+  if (_paperTemplateView) {
+    [_paperTemplateView removeFromSuperview];
+    _paperTemplateView = nil;
   }
-
-  // Load the background image from the bundle
-  UIImage* backgroundImage = [UIImage imageNamed:@"pencilkit_background"
-                                        inBundle:[NSBundle bundleForClass:[self class]]
-                   compatibleWithTraitCollection:nil];
-
-  if (backgroundImage) {
-    // Create an image view with size adjusted for current zoom scale
-    CGFloat scale = _view.zoomScale;
-    _backgroundImageView =
-        [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 20000 * scale, 20000 * scale)];
-    _backgroundImageView.image = backgroundImage;
-    _backgroundImageView.contentMode = UIViewContentModeScaleToFill;
-    _backgroundImageView.userInteractionEnabled = NO;
-
-    // Add the image view to the canvas and send it to the back
-    [_view addSubview:_backgroundImageView];
-    [_view sendSubviewToBack:_backgroundImageView];
-  }
+  _paperTemplateView = [[PaperTemplateView alloc]
+        initWithFrame:CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height)
+         templateType:templateType
+      backgroundColor:backgroundColor];
+  _paperTemplateView.userInteractionEnabled = NO;
+  [_view addSubview:_paperTemplateView];
+  [_view sendSubviewToBack:_paperTemplateView];
 }
+
+// - (void)setupBackgroundImage {
+//   // Only setup if showLinedPaper is enabled
+//   if (!_showLinedPaper) {
+//     return;
+//   }
+
+//   // Load the background image from the bundle
+//   UIImage* backgroundImage = [UIImage imageNamed:@"pencilkit_background"
+//                                         inBundle:[NSBundle bundleForClass:[self class]]
+//                    compatibleWithTraitCollection:nil];
+
+//   if (backgroundImage) {
+//     // Create an image view with size adjusted for current zoom scale
+//     CGFloat scale = _view.zoomScale;
+//     _backgroundImageView =
+//         [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 20000 * scale, 20000 * scale)];
+//     _backgroundImageView.image = backgroundImage;
+//     _backgroundImageView.contentMode = UIViewContentModeScaleToFill;
+//     _backgroundImageView.userInteractionEnabled = NO;
+
+//     // Add the image view to the canvas and send it to the back
+//     [_view addSubview:_backgroundImageView];
+//     [_view sendSubviewToBack:_backgroundImageView];
+//   }
+// }
 
 - (void)startDebugUpdates {
   if (!_displayLink) {
@@ -290,6 +458,15 @@ getEmitter(const SharedViewEventEmitter emitter) {
                         atScale:(CGFloat)scale {
 
   [self updateContentInset];
+
+  // Force paper template to redraw completely after zoom ends
+  // CATiledLayer caches tiles, so we need to clear and redraw
+  if (_paperTemplateView) {
+    ((PaperTemplateView*)_paperTemplateView).zoomScale = _view.zoomScale;
+    _paperTemplateView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
+    _paperTemplateView.layer.contents = nil;
+    [_paperTemplateView.layer setNeedsDisplay];
+  }
 }
 
 - (void)scrollViewDidZoom:(UIScrollView*)scrollView {
@@ -298,6 +475,9 @@ getEmitter(const SharedViewEventEmitter emitter) {
     _view.contentInset = UIEdgeInsetsMake(_lastEdgeInsets.top / _view.zoomScale,
                                           _lastEdgeInsets.left / _view.zoomScale, 0,
                                           _lastEdgeInsets.right / _view.zoomScale);
+  }
+  if (_paperTemplateView) {
+    _paperTemplateView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
   }
   // Update background image size to match zoom level
   if (_backgroundImageView) {
@@ -356,7 +536,8 @@ getEmitter(const SharedViewEventEmitter emitter) {
     [_view setOpaque:next.isOpaque];
 
   if (prev.backgroundColor ^ next.backgroundColor) {
-    [_view setBackgroundColor:intToColor(next.backgroundColor)];
+    [self setupPaperTemplateWithType:_paperTemplate
+                     backgroundColor:intToColor(next.backgroundColor)];
   }
   if (prev.infiniteScrollDirection != next.infiniteScrollDirection) {
     _infScrollDir = next.infiniteScrollDirection;
@@ -386,21 +567,34 @@ getEmitter(const SharedViewEventEmitter emitter) {
       [self stopDebugUpdates];
     }
   }
-
-  if (prev.showLinedPaper ^ next.showLinedPaper) {
-    _showLinedPaper = next.showLinedPaper;
-
-    if (next.showLinedPaper) {
-      // Enable background image
-      [self setupBackgroundImage];
-    } else {
-      // Disable background image
-      if (_backgroundImageView) {
-        [_backgroundImageView removeFromSuperview];
-        _backgroundImageView = nil;
-      }
-    }
+  if (prev.paperTemplate != next.paperTemplate) {
+    _paperTemplate = next.paperTemplate;
+    [self setupPaperTemplateWithType:_paperTemplate
+                     backgroundColor:intToColor(next.backgroundColor)];
   }
+
+  // if (prev.showLinedPaper ^ next.showLinedPaper) {
+  //   _showLinedPaper = next.showLinedPaper;
+
+  //   // Remove existing paper template view
+  //   if (_paperTemplateView) {
+  //     [_paperTemplateView removeFromSuperview];
+  //     _paperTemplateView = nil;
+  //   }
+
+  //   if (next.showLinedPaper) {
+  //     [self setupPaperTemplateWithType:PaperTemplateTypeDotted backgroundColor:[UIColor
+  //     whiteColor]];
+  //     // Enable background image
+  //     [self setupBackgroundImage];
+  //   } else {
+  //     // Disable background image
+  //     if (_backgroundImageView) {
+  //       [_backgroundImageView removeFromSuperview];
+  //       _backgroundImageView = nil;
+  //     }
+  //   }
+  // }
 
   [super updateProps:props oldProps:oldProps];
 }
@@ -437,6 +631,10 @@ getEmitter(const SharedViewEventEmitter emitter) {
 - (void)layoutSubviews {
   [super layoutSubviews];
 
+  if (_paperTemplateView) {
+    _paperTemplateView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
+  }
+
   if (_allowInfiniteScroll)
     [self applyContentSizeForInfiniteScroll];
 
@@ -461,34 +659,6 @@ getEmitter(const SharedViewEventEmitter emitter) {
   const CGPoint visibleOriginInContent = (CGPoint){_view.bounds.origin.x, _view.bounds.origin.y};
 
   const CGRect visible = (CGRect){visibleOriginInContent, viewportInContent};
-
-  if (CGSizeEqualToSize(_view.drawing.bounds.size, CGSizeZero)) {
-    if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Vertical) {
-      // if we want to scroll vertically, we must set negative insets on the bottom to allow
-      // progressive unlocking, and a positive offset on the top to make the page appear below the
-      // top edge of the screen
-      _view.contentInset =
-          (UIEdgeInsets){.top = 0,
-                         .left = 0,
-                         .bottom = _view.contentSize.height - viewportInContent.height,
-                         .right = 0};
-
-      _view.contentOffset = (CGPoint){.x = 0, .y = viewportInContent.height / 3.0};
-
-    } else {
-      // Center an empty canvas using viewportInContent, not raw bounds
-      const CGFloat leftInset = (_view.contentSize.width - viewportInContent.width) / 2.0;
-      const CGFloat topInset = (_view.contentSize.height - viewportInContent.height) / 2.0;
-
-      _view.contentInset = (UIEdgeInsets){
-          .top = -topInset,
-          .left = -leftInset,
-          .bottom = -topInset,
-          .right = -leftInset,
-      };
-    }
-    return;
-  }
 
   const CGRect drawing =
       (CGRect){.origin = (CGPoint){_view.drawing.bounds.origin.x * _view.zoomScale,
@@ -517,11 +687,40 @@ getEmitter(const SharedViewEventEmitter emitter) {
   finalContentBounds.size.height =
       MIN(finalContentBounds.size.height, _view.contentSize.height - finalContentBounds.origin.y);
 
+  CGFloat horizontallyCenteringInset =
+      finalContentBounds.size.width < viewportInContent.width
+          ? ((viewportInContent.width - finalContentBounds.size.width) / 2.0)
+          : 0;
+
+  if (CGSizeEqualToSize(_view.drawing.bounds.size, CGSizeZero)) {
+    if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Vertical) {
+      // if we want to scroll vertically, we must set negative insets on the bottom to allow
+      // progressive unlocking, and a positive offset on the top to make the page appear below the
+      // top edge of the screen
+      _view.contentInset =
+          (UIEdgeInsets){.top = -finalContentBounds.origin.y + (viewportInContent.height / 3.0),
+                         .left = horizontallyCenteringInset,
+                         .bottom = _view.contentSize.height - viewportInContent.height,
+                         .right = horizontallyCenteringInset};
+
+      _view.contentOffset = (CGPoint){.x = 0, .y = viewportInContent.height / 3.0};
+
+    } else {
+      // Center an empty canvas using viewportInContent, not raw bounds
+      const CGFloat leftInset = (_view.contentSize.width - viewportInContent.width) / 2.0;
+      const CGFloat topInset = (_view.contentSize.height - viewportInContent.height) / 2.0;
+
+      _view.contentInset = (UIEdgeInsets){
+          .top = -topInset,
+          .left = -leftInset,
+          .bottom = -topInset,
+          .right = -leftInset,
+      };
+    }
+    return;
+  }
+
   if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Vertical) {
-    CGFloat horizontallyCenteringInset =
-        finalContentBounds.size.width < viewportInContent.width
-            ? ((viewportInContent.width - finalContentBounds.size.width) / 2.0)
-            : 0;
 
     _view.contentInset = (UIEdgeInsets){
         .top = -finalContentBounds.origin.y + (viewportInContent.height / 3.0),
@@ -691,22 +890,17 @@ getEmitter(const SharedViewEventEmitter emitter) {
   newView.bounds = v.bounds;
   newView.delegate = self;
 
-  // Setup background image for the new canvas
-  if (_showLinedPaper) {
-    UIImage* backgroundImage = [UIImage imageNamed:@"pencilkit_background"
-                                          inBundle:[NSBundle bundleForClass:[self class]]
-                     compatibleWithTraitCollection:nil];
-    if (backgroundImage) {
-      CGFloat scale = newView.zoomScale;
-      UIImageView* newBackgroundImageView =
-          [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 20000 * scale, 20000 * scale)];
-      newBackgroundImageView.image = backgroundImage;
-      newBackgroundImageView.contentMode = UIViewContentModeScaleToFill;
-      newBackgroundImageView.userInteractionEnabled = NO;
-      [newView addSubview:newBackgroundImageView];
-      [newView sendSubviewToBack:newBackgroundImageView];
-      _backgroundImageView = newBackgroundImageView;
-    }
+  // Setup paper template view for the new canvas
+  if (_paperTemplateView) {
+    PaperTemplateView* oldPaperView = (PaperTemplateView*)_paperTemplateView;
+    PaperTemplateView* newPaperTemplateView =
+        [[PaperTemplateView alloc] initWithFrame:_paperTemplateView.frame
+                                    templateType:oldPaperView.templateType
+                                 backgroundColor:oldPaperView.paperBackgroundColor];
+    newPaperTemplateView.userInteractionEnabled = NO;
+    [newView addSubview:newPaperTemplateView];
+    [newView sendSubviewToBack:newPaperTemplateView];
+    _paperTemplateView = newPaperTemplateView;
   }
 
   // ── Copy Pencil double-tap interaction (2nd-gen Pencil or Apple Pencil Pro) ──

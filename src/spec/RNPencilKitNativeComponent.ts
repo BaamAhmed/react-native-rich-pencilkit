@@ -11,39 +11,24 @@ import codegenNativeCommands from 'react-native/Libraries/Utilities/codegenNativ
 import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNativeComponent';
 
 export interface NativeProps extends ViewProps {
-  alwaysBounceVertical: boolean;
-  alwaysBounceHorizontal: boolean;
   isRulerActive: boolean;
-  backgroundColor: Int32;
   drawingPolicy?: WithDefault<'default' | 'anyinput' | 'pencilonly', 'default'>;
   isOpaque?: boolean;
-  contentSize?: {
-    width: Double;
-    height: Double;
-  };
 
   minimumZoomScale?: Double;
   maximumZoomScale?: Double;
-  contentAlignmentPoint?: {
-    x: Double;
-    y: Double;
-  };
-  contentInset?: {
-    top: Double;
-    right: Double;
-    bottom: Double;
-    left: Double;
-  };
-  contentAreaBorderWidth?: Double;
-  contentAreaBorderColor?: Int32;
-  contentAreaBackgroundColor?: Int32;
+  alwaysBounceVertical: boolean;
+  alwaysBounceHorizontal: boolean;
+
   allowInfiniteScroll?: boolean;
   infiniteScrollDirection?: WithDefault<
     'bidirectional' | 'vertical' | 'horizontal',
     'bidirectional'
   >;
   showDebugInfo?: boolean;
-  showLinedPaper?: boolean;
+
+  paperTemplate?: WithDefault<'blank' | 'lined' | 'dotted' | 'grid', 'blank'>;
+  backgroundColor: Int32;
 
   onToolPickerVisibilityDidChange?: DirectEventHandler<{}>;
   onToolPickerIsRulerActiveDidChange?: DirectEventHandler<{}>;
