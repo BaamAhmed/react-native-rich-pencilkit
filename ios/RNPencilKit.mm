@@ -7,6 +7,7 @@
 #import <react/renderer/components/RNPencilKitSpec/RCTComponentViewHelpers.h>
 
 #import "RCTFabricComponentsPlugins.h"
+#import <PDFKit/PDFKit.h>
 
 using namespace facebook::react;
 
@@ -14,6 +15,117 @@ static inline const std::shared_ptr<const RNPencilKitEventEmitter>
 getEmitter(const SharedViewEventEmitter emitter) {
   return std::static_pointer_cast<const RNPencilKitEventEmitter>(emitter);
 }
+
+@interface NoFadeTiledLayer : CATiledLayer
+@end
+
+// In NoFadeTiledLayer.m
+@implementation NoFadeTiledLayer
++ (CFTimeInterval)fadeDuration {
+  return 0.0;
+}
+@end
+
+@interface PDFDocumentBackgroundView : UIView
+@property(nonatomic, strong) PDFDocument* document;
+@property(nonatomic, assign) CGFloat zoomScale;
+@property(nonatomic, assign) CGFloat totalHeight;
+@property(nonatomic, assign) CGFloat pageWidth;
+@property(nonatomic, strong) NSArray<NSNumber*>* pageYOffsets; // cumulative Y offset for each page
+@end
+
+@implementation PDFDocumentBackgroundView
+
++ (Class)layerClass {
+  return [NoFadeTiledLayer class];
+}
+
+- (instancetype)initWithFrame:(CGRect)frame pdfPath:(NSString*)pdfPath {
+  if (self = [super initWithFrame:frame]) {
+    _zoomScale = 1.0;
+
+    // Check if pdfPath is valid before creating NSURL
+    if (pdfPath && pdfPath.length > 0) {
+      NSURL* pdfURL = [NSURL fileURLWithPath:pdfPath];
+      _document = [[PDFDocument alloc] initWithURL:pdfURL];
+
+      if (_document) {
+        [self calculateLayout];
+      }
+    }
+
+    CATiledLayer* tiledLayer = (CATiledLayer*)self.layer;
+    tiledLayer.tileSize = CGSizeMake(1024, 1024);
+    tiledLayer.levelsOfDetail = 1;
+
+    // tiledLayer.levelsOfDetailBias = 0;
+    // tiledLayer.needsDisplayOnBoundsChange = YES;
+  }
+  return self;
+}
+
+- (void)calculateLayout {
+  NSMutableArray* offsets = [NSMutableArray array];
+  CGFloat yOffset = 0;
+  CGFloat maxWidth = 0;
+
+  for (NSInteger i = 0; i < _document.pageCount; i++) {
+    PDFPage* page = [_document pageAtIndex:i];
+    CGRect bounds = [page boundsForBox:kPDFDisplayBoxMediaBox];
+
+    [offsets addObject:@(yOffset)];
+    yOffset += bounds.size.height;
+    maxWidth = MAX(maxWidth, bounds.size.width);
+  }
+
+  _pageYOffsets = [offsets copy];
+  _totalHeight = yOffset;
+  _pageWidth = maxWidth;
+}
+
+- (void)drawRect:(CGRect)rect {
+  if (!_document || _pageWidth <= 0)
+    return;
+
+  CGContextRef context = UIGraphicsGetCurrentContext();
+
+  // Fill background white
+  [[UIColor whiteColor] setFill];
+  UIRectFill(rect);
+
+  // Scale PDF to fit the view's width (not by zoomScale - scroll view handles that)
+  CGFloat fitScale = self.bounds.size.width / _pageWidth;
+
+  // Find which pages intersect this rect and draw them
+  for (NSInteger i = 0; i < _document.pageCount; i++) {
+    CGFloat pageY = [_pageYOffsets[i] floatValue];
+    PDFPage* page = [_document pageAtIndex:i];
+    CGRect pageBounds = [page boundsForBox:kPDFDisplayBoxMediaBox];
+
+    // Page frame in scaled coordinates
+    CGRect pageFrame = CGRectMake(0, pageY * fitScale, pageBounds.size.width * fitScale,
+                                  pageBounds.size.height * fitScale);
+
+    // Skip pages that don't intersect the dirty rect
+    if (!CGRectIntersectsRect(rect, pageFrame)) {
+      continue;
+    }
+
+    // Draw this page
+    CGContextSaveGState(context);
+
+    // Scale to fit width, flip coordinate system for PDF drawing
+    CGContextScaleCTM(context, fitScale, fitScale);
+    CGContextTranslateCTM(context, 0, pageY + pageBounds.size.height);
+    CGContextScaleCTM(context, 1.0, -1.0);
+
+    [page drawWithBox:kPDFDisplayBoxMediaBox toContext:context];
+
+    CGContextRestoreGState(context);
+  }
+}
+
+@end
 
 // PaperTemplateView - view that draws paper backgrounds using CATiledLayer
 @interface PaperTemplateView : UIView
@@ -219,6 +331,8 @@ getEmitter(const SharedViewEventEmitter emitter) {
   CADisplayLink* _Nullable _displayLink;
   UIImageView* _Nullable _backgroundImageView;
   UIView* _Nullable _paperTemplateView;
+  UIView* _Nullable _pdfBackgroundView;
+  CGFloat _lastPDFZoomScale;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -249,6 +363,10 @@ getEmitter(const SharedViewEventEmitter emitter) {
       _view.tool = defaultTool;
       _toolPicker.selectedTool = defaultTool;
     }
+
+    NSBundle* bundle = [NSBundle bundleForClass:[self class]];
+    NSString* pdfPath = [bundle pathForResource:@"sample_final" ofType:@"pdf"];
+    [self setupPDFBackground:pdfPath];
 
     [self setupPaperTemplateWithType:_paperTemplate backgroundColor:[UIColor whiteColor]];
     // Setup background image before setting contentView
@@ -307,6 +425,47 @@ getEmitter(const SharedViewEventEmitter emitter) {
   _paperTemplateView.userInteractionEnabled = NO;
   [_view addSubview:_paperTemplateView];
   [_view sendSubviewToBack:_paperTemplateView];
+}
+
+- (void)setupPDFBackground:(NSString*)pdfPath {
+
+  if (_paperTemplateView) {
+    [_paperTemplateView removeFromSuperview];
+    _paperTemplateView = nil;
+  }
+
+  // Remove existing PDF view
+  if (_pdfBackgroundView) {
+    [_pdfBackgroundView removeFromSuperview];
+    _pdfBackgroundView = nil;
+  }
+
+  if (!pdfPath || pdfPath.length == 0)
+    return;
+
+  PDFDocumentBackgroundView* pdfView = [[PDFDocumentBackgroundView alloc] initWithFrame:CGRectZero
+                                                                                pdfPath:pdfPath];
+
+  if (!pdfView.document)
+    return;
+
+  // Set content size to match PDF dimensions
+  // Width matches view, height is total PDF height
+  // CGFloat viewWidth = _view.contentSize.width;
+  // CGFloat scale = viewWidth / pdfView.pageWidth;
+  // CGFloat scaledHeight = pdfView.totalHeight * scale;
+
+  // _view.contentSize = CGSizeMake(viewWidth, scaledHeight);
+
+  // Set PDF view frame to match content
+  pdfView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
+  pdfView.zoomScale = _view.zoomScale;
+  // pdfView.transform = CGAffineTransformMakeScale(scale, scale);
+  pdfView.userInteractionEnabled = NO;
+
+  _pdfBackgroundView = pdfView;
+  [_view addSubview:_pdfBackgroundView];
+  [_view sendSubviewToBack:_pdfBackgroundView];
 }
 
 // - (void)setupBackgroundImage {
@@ -373,6 +532,38 @@ getEmitter(const SharedViewEventEmitter emitter) {
   NSMutableString* debugText = [NSMutableString string];
   [debugText appendString:@"  DEBUG INFO  \n"];
   [debugText appendString:@"━━━━━━━━━━━━━\n"];
+
+  // PDF Debug Info
+  [debugText appendString:@"── PDF Background ──\n"];
+  if (_pdfBackgroundView) {
+    PDFDocumentBackgroundView* pdfView = (PDFDocumentBackgroundView*)_pdfBackgroundView;
+    [debugText appendFormat:@"View: EXISTS\n"];
+    [debugText appendFormat:@"Document: %@\n", pdfView.document ? @"LOADED" : @"NULL"];
+    if (pdfView.document) {
+      [debugText appendFormat:@"Pages: %lu\n", (unsigned long)pdfView.document.pageCount];
+      [debugText appendFormat:@"PageWidth: %.1f\n", pdfView.pageWidth];
+      [debugText appendFormat:@"TotalHeight: %.1f\n", pdfView.totalHeight];
+    }
+    CGRect pdfFrame = pdfView.frame;
+    [debugText appendFormat:@"Frame: (%.1f,%.1f) %.1fx%.1f\n", pdfFrame.origin.x, pdfFrame.origin.y,
+                            pdfFrame.size.width, pdfFrame.size.height];
+    CGAffineTransform t = pdfView.transform;
+    [debugText appendFormat:@"Transform: [%.2f,%.2f,%.2f,%.2f]\n", t.a, t.b, t.c, t.d];
+    [debugText appendFormat:@"Hidden: %@\n", pdfView.hidden ? @"YES" : @"NO"];
+    [debugText appendFormat:@"Alpha: %.2f\n", pdfView.alpha];
+    [debugText appendFormat:@"Superview: %@\n", pdfView.superview ? @"YES" : @"NO"];
+  } else {
+    [debugText appendString:@"View: NULL\n"];
+    // Check if PDF path exists
+    NSBundle* bundle = [NSBundle bundleForClass:[self class]];
+    NSString* pdfPath = [bundle pathForResource:@"Transcript" ofType:@"pdf"];
+    [debugText appendFormat:@"Path: %@\n", pdfPath ? @"FOUND" : @"NOT FOUND"];
+    if (pdfPath) {
+      [debugText appendFormat:@"  %@\n", [pdfPath lastPathComponent]];
+    }
+  }
+  [debugText appendString:@"\n"];
+
   [debugText appendFormat:@"Zoom: %.2fx\n", zoomScale];
   [debugText appendFormat:@"MinZoom: %.2f MaxZoom: %.2f\n", _view.minimumZoomScale,
                           _view.maximumZoomScale];
@@ -459,6 +650,13 @@ getEmitter(const SharedViewEventEmitter emitter) {
 
   [self updateContentInset];
 
+  if (_pdfBackgroundView) {
+    _pdfBackgroundView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
+
+    // _pdfBackgroundView.layer.contents = nil;
+    [_pdfBackgroundView.layer setNeedsDisplay];
+  }
+
   // Force paper template to redraw completely after zoom ends
   // CATiledLayer caches tiles, so we need to clear and redraw
   if (_paperTemplateView) {
@@ -479,6 +677,12 @@ getEmitter(const SharedViewEventEmitter emitter) {
   if (_paperTemplateView) {
     _paperTemplateView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
   }
+
+  if (_pdfBackgroundView) {
+    _pdfBackgroundView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
+    ((PDFDocumentBackgroundView*)_pdfBackgroundView).zoomScale = _view.zoomScale;
+  }
+
   // Update background image size to match zoom level
   if (_backgroundImageView) {
     CGFloat scale = _view.zoomScale;
@@ -633,6 +837,11 @@ getEmitter(const SharedViewEventEmitter emitter) {
 
   if (_paperTemplateView) {
     _paperTemplateView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
+  }
+
+  // Update PDF background view frame on layout
+  if (_pdfBackgroundView) {
+    _pdfBackgroundView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
   }
 
   if (_allowInfiniteScroll)
@@ -889,6 +1098,30 @@ getEmitter(const SharedViewEventEmitter emitter) {
   newView.zoomScale = v.zoomScale;
   newView.bounds = v.bounds;
   newView.delegate = self;
+
+  // Setup PDF background view for the new canvas
+  if (_pdfBackgroundView) {
+    PDFDocumentBackgroundView* oldPdfView = (PDFDocumentBackgroundView*)_pdfBackgroundView;
+    PDFDocumentBackgroundView* newPdfBackgroundView = [[PDFDocumentBackgroundView alloc]
+        initWithFrame:oldPdfView.frame
+              pdfPath:nil]; // Document is already loaded, we'll copy it
+
+    // Copy the document reference and layout properties
+    newPdfBackgroundView.document = oldPdfView.document;
+    newPdfBackgroundView.pageYOffsets = oldPdfView.pageYOffsets;
+    newPdfBackgroundView.totalHeight = oldPdfView.totalHeight;
+    newPdfBackgroundView.pageWidth = oldPdfView.pageWidth;
+    newPdfBackgroundView.zoomScale = oldPdfView.zoomScale;
+    newPdfBackgroundView.frame = oldPdfView.frame;
+    newPdfBackgroundView.layer.anchorPoint = oldPdfView.layer.anchorPoint;
+    newPdfBackgroundView.layer.position = oldPdfView.layer.position;
+    newPdfBackgroundView.transform = oldPdfView.transform;
+    newPdfBackgroundView.userInteractionEnabled = NO;
+
+    [newView addSubview:newPdfBackgroundView];
+    [newView sendSubviewToBack:newPdfBackgroundView];
+    _pdfBackgroundView = newPdfBackgroundView;
+  }
 
   // Setup paper template view for the new canvas
   if (_paperTemplateView) {
