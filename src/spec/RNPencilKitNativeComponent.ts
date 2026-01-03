@@ -29,6 +29,7 @@ export interface NativeProps extends ViewProps {
 
   paperTemplate?: WithDefault<'blank' | 'lined' | 'dotted' | 'grid', 'blank'>;
   backgroundColor: Int32;
+  pdfPath: string;
 
   onToolPickerVisibilityDidChange?: DirectEventHandler<{}>;
   onToolPickerIsRulerActiveDidChange?: DirectEventHandler<{}>;

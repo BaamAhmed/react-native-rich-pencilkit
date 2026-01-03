@@ -22,6 +22,7 @@ export type PencilKitProps = {
 
   paperTemplate?: WithDefault<'blank' | 'lined' | 'dotted' | 'grid', 'blank'>;
   backgroundColor?: ColorValue;
+  pdfPath?: string;
 
   onToolPickerVisibilityDidChange?: DirectEventHandler<{}>;
   onToolPickerIsRulerActiveDidChange?: DirectEventHandler<{}>;

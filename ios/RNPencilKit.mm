@@ -9,6 +9,10 @@
 #import "RCTFabricComponentsPlugins.h"
 #import <PDFKit/PDFKit.h>
 
+#import "PDFDocumentBackgroundView.h"
+#import "PKIsolatedCanvasView.h"
+#import "PaperTemplateView.h"
+
 using namespace facebook::react;
 
 static inline const std::shared_ptr<const RNPencilKitEventEmitter>
@@ -16,302 +20,20 @@ getEmitter(const SharedViewEventEmitter emitter) {
   return std::static_pointer_cast<const RNPencilKitEventEmitter>(emitter);
 }
 
-@interface NoFadeTiledLayer : CATiledLayer
-@end
-
-// In NoFadeTiledLayer.m
-@implementation NoFadeTiledLayer
-+ (CFTimeInterval)fadeDuration {
-  return 0.0;
-}
-@end
-
-@interface PDFDocumentBackgroundView : UIView
-@property(nonatomic, strong) PDFDocument* document;
-@property(nonatomic, assign) CGFloat zoomScale;
-@property(nonatomic, assign) CGFloat totalHeight;
-@property(nonatomic, assign) CGFloat pageWidth;
-@property(nonatomic, strong) NSArray<NSNumber*>* pageYOffsets; // cumulative Y offset for each page
-@end
-
-@implementation PDFDocumentBackgroundView
-
-+ (Class)layerClass {
-  return [NoFadeTiledLayer class];
-}
-
-- (instancetype)initWithFrame:(CGRect)frame pdfPath:(NSString*)pdfPath {
-  if (self = [super initWithFrame:frame]) {
-    _zoomScale = 1.0;
-
-    // Check if pdfPath is valid before creating NSURL
-    if (pdfPath && pdfPath.length > 0) {
-      NSURL* pdfURL = [NSURL fileURLWithPath:pdfPath];
-      _document = [[PDFDocument alloc] initWithURL:pdfURL];
-
-      if (_document) {
-        [self calculateLayout];
-      }
-    }
-
-    CATiledLayer* tiledLayer = (CATiledLayer*)self.layer;
-    tiledLayer.tileSize = CGSizeMake(1024, 1024);
-    tiledLayer.levelsOfDetail = 1;
-
-    // tiledLayer.levelsOfDetailBias = 0;
-    // tiledLayer.needsDisplayOnBoundsChange = YES;
-  }
-  return self;
-}
-
-- (void)calculateLayout {
-  NSMutableArray* offsets = [NSMutableArray array];
-  CGFloat yOffset = 0;
-  CGFloat maxWidth = 0;
-
-  for (NSInteger i = 0; i < _document.pageCount; i++) {
-    PDFPage* page = [_document pageAtIndex:i];
-    CGRect bounds = [page boundsForBox:kPDFDisplayBoxMediaBox];
-
-    [offsets addObject:@(yOffset)];
-    yOffset += bounds.size.height;
-    maxWidth = MAX(maxWidth, bounds.size.width);
-  }
-
-  _pageYOffsets = [offsets copy];
-  _totalHeight = yOffset;
-  _pageWidth = maxWidth;
-}
-
-- (void)drawRect:(CGRect)rect {
-  if (!_document || _pageWidth <= 0)
-    return;
-
-  CGContextRef context = UIGraphicsGetCurrentContext();
-
-  // Fill background white
-  [[UIColor whiteColor] setFill];
-  UIRectFill(rect);
-
-  // Scale PDF to fit the view's width (not by zoomScale - scroll view handles that)
-  CGFloat fitScale = self.bounds.size.width / _pageWidth;
-
-  // Find which pages intersect this rect and draw them
-  for (NSInteger i = 0; i < _document.pageCount; i++) {
-    CGFloat pageY = [_pageYOffsets[i] floatValue];
-    PDFPage* page = [_document pageAtIndex:i];
-    CGRect pageBounds = [page boundsForBox:kPDFDisplayBoxMediaBox];
-
-    // Page frame in scaled coordinates
-    CGRect pageFrame = CGRectMake(0, pageY * fitScale, pageBounds.size.width * fitScale,
-                                  pageBounds.size.height * fitScale);
-
-    // Skip pages that don't intersect the dirty rect
-    if (!CGRectIntersectsRect(rect, pageFrame)) {
-      continue;
-    }
-
-    // Draw this page
-    CGContextSaveGState(context);
-
-    // Scale to fit width, flip coordinate system for PDF drawing
-    CGContextScaleCTM(context, fitScale, fitScale);
-    CGContextTranslateCTM(context, 0, pageY + pageBounds.size.height);
-    CGContextScaleCTM(context, 1.0, -1.0);
-
-    [page drawWithBox:kPDFDisplayBoxMediaBox toContext:context];
-
-    CGContextRestoreGState(context);
-  }
-}
-
-@end
-
-// PaperTemplateView - view that draws paper backgrounds using CATiledLayer
-@interface PaperTemplateView : UIView
-@property(nonatomic, assign) RNPencilKitPaperTemplate templateType;
-@property(nonatomic, strong) UIColor* paperBackgroundColor;
-@property(nonatomic, assign) CGFloat zoomScale;
-- (instancetype)initWithFrame:(CGRect)frame
-                 templateType:(RNPencilKitPaperTemplate)templateType
-              backgroundColor:(UIColor*)backgroundColor;
-@end
-
-@implementation PaperTemplateView
-
-+ (Class)layerClass {
-  return [CATiledLayer class];
-}
-
-- (instancetype)initWithFrame:(CGRect)frame
-                 templateType:(RNPencilKitPaperTemplate)templateType
-              backgroundColor:(UIColor*)backgroundColor {
-  if (self = [super initWithFrame:frame]) {
-    _templateType = templateType;
-    _paperBackgroundColor = backgroundColor ?: [UIColor clearColor];
-    _zoomScale = 1.0;
-
-    [_paperBackgroundColor setFill];
-    UIRectFill(frame);
-
-    CATiledLayer* tiledLayer = (CATiledLayer*)self.layer;
-    tiledLayer.tileSize = CGSizeMake(512, 512);
-    tiledLayer.levelsOfDetail = 1;
-    tiledLayer.levelsOfDetailBias = 0;
-  }
-  return self;
-}
-
-- (void)drawLined:(CGRect)rect {
-  CGFloat lineHeight = 24.0 * _zoomScale;
-  CGFloat lineThickness = 2.0 * _zoomScale;
-  CGFloat width = CGRectGetWidth(self.layer.bounds);
-
-  [[UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:1.0] setFill];
-  UIRectFill(rect);
-
-  [[UIColor colorWithRed:0.85 green:0.85 blue:0.9 alpha:1.0] setFill];
-
-  // Only draw lines that intersect the dirty rect
-  CGFloat startY = floor(rect.origin.y / lineHeight) * lineHeight;
-  CGFloat endY = CGRectGetMaxY(rect);
-
-  for (CGFloat y = startY; y < endY; y += lineHeight) {
-    CGRect lineRect = CGRectMake(0, y, width, lineThickness);
-    UIRectFill(lineRect);
-  }
-}
-
-- (void)drawDotted:(CGRect)rect {
-  CGFloat dotSpacing = 24.0 * _zoomScale;
-  CGFloat dotRadius = 2.0 * _zoomScale;
-
-  [[UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:1.0] setFill];
-  UIRectFill(rect);
-
-  [[UIColor colorWithRed:0.85 green:0.85 blue:0.9 alpha:1.0] setFill];
-
-  // Only draw dots that intersect the dirty rect
-  CGFloat startX = floor(rect.origin.x / dotSpacing) * dotSpacing;
-  CGFloat startY = floor(rect.origin.y / dotSpacing) * dotSpacing;
-  CGFloat endX = CGRectGetMaxX(rect);
-  CGFloat endY = CGRectGetMaxY(rect);
-
-  for (CGFloat y = startY; y < endY; y += dotSpacing) {
-    for (CGFloat x = startX; x < endX; x += dotSpacing) {
-      CGRect dotRect = CGRectMake(x - dotRadius, y - dotRadius, dotRadius * 2, dotRadius * 2);
-      UIBezierPath* dotPath = [UIBezierPath bezierPathWithOvalInRect:dotRect];
-      [dotPath fill];
-    }
-  }
-}
-
-- (void)drawGrid:(CGRect)rect {
-  CGFloat gridSpacing = 24.0 * _zoomScale;
-  CGFloat lineThickness = 1.0 * _zoomScale;
-  CGFloat width = CGRectGetWidth(self.layer.bounds);
-  CGFloat height = CGRectGetHeight(self.layer.bounds);
-
-  [[UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:1.0] setFill];
-  UIRectFill(rect);
-
-  [[UIColor colorWithRed:0.85 green:0.85 blue:0.9 alpha:1.0] setFill];
-
-  // Draw horizontal lines that intersect the dirty rect
-  CGFloat startY = floor(rect.origin.y / gridSpacing) * gridSpacing;
-  CGFloat endY = CGRectGetMaxY(rect);
-
-  for (CGFloat y = startY; y < endY; y += gridSpacing) {
-    CGRect lineRect = CGRectMake(0, y, width, lineThickness);
-    UIRectFill(lineRect);
-  }
-
-  // Draw vertical lines that intersect the dirty rect
-  CGFloat startX = floor(rect.origin.x / gridSpacing) * gridSpacing;
-  CGFloat endX = CGRectGetMaxX(rect);
-
-  for (CGFloat x = startX; x < endX; x += gridSpacing) {
-    CGRect lineRect = CGRectMake(x, 0, lineThickness, height);
-    UIRectFill(lineRect);
-  }
-}
-
-- (void)drawBorder:(CGRect)rect {
-  CGFloat borderWidth = 3.0 * _zoomScale;
-  UIColor* borderColor = [UIColor colorWithRed:0.8 green:0.8 blue:0.85 alpha:1.0];
-
-  [borderColor setStroke];
-  UIBezierPath* borderPath =
-      [UIBezierPath bezierPathWithRect:CGRectInset(self.bounds, borderWidth / 2, borderWidth / 2)];
-  borderPath.lineWidth = borderWidth;
-  // [_paperBackgroundColor setFill];
-  // [borderPath fill];
-  [borderPath stroke];
-}
-
-- (void)drawRect:(CGRect)rect {
-  // Fill background
-  // [_paperBackgroundColor setFill];
-  // UIRectFill(rect);
-  [self drawBorder:rect];
-
-  // Draw template pattern based on type
-  switch (_templateType) {
+// Helper function to convert RNPencilKitPaperTemplate to PaperTemplateType
+static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate template_) {
+  switch (template_) {
     case RNPencilKitPaperTemplate::Lined:
-      [self drawLined:rect];
-      break;
+      return PaperTemplateTypeLined;
     case RNPencilKitPaperTemplate::Dotted:
-      [self drawDotted:rect];
-      break;
+      return PaperTemplateTypeDotted;
     case RNPencilKitPaperTemplate::Grid:
-      [self drawGrid:rect];
-      break;
+      return PaperTemplateTypeGrid;
     case RNPencilKitPaperTemplate::Blank:
     default:
-      // No pattern for blank
-      break;
+      return PaperTemplateTypeBlank;
   }
-
-  // Draw border around the view
 }
-
-@end
-
-// 1) Make an isolated canvas subclass
-@interface PKIsolatedCanvasView : PKCanvasView
-@property(nonatomic, strong) NSUndoManager* isolatedUndoManager;
-@end
-
-@implementation PKIsolatedCanvasView
-- (instancetype)initWithFrame:(CGRect)frame {
-  if (self = [super initWithFrame:frame]) {
-    _isolatedUndoManager = [NSUndoManager new];
-    _isolatedUndoManager.levelsOfUndo = 128; // tune as needed
-
-    // Prevent iOS from automatically scrolling to top
-    self.scrollsToTop = NO;
-
-    // Prevent iOS from adjusting content insets automatically
-    if (@available(iOS 11.0, *)) {
-      self.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
-    }
-  }
-  return self;
-}
-- (NSUndoManager*)undoManager {
-  return _isolatedUndoManager;
-}
-
-- (BOOL)resignFirstResponder {
-  CGPoint savedOffset = self.contentOffset;
-  BOOL result = [super resignFirstResponder];
-  // Restore scroll position on next run loop to override any automatic scrolling
-  dispatch_async(dispatch_get_main_queue(), ^{
-    [self setContentOffset:savedOffset animated:NO];
-  });
-  return result;
-}
-@end
 
 @interface RNPencilKit () <RCTRNPencilKitViewProtocol, PKCanvasViewDelegate, PKToolPickerObserver,
                            UIPencilInteractionDelegate, UIScrollViewDelegate>
@@ -330,9 +52,8 @@ getEmitter(const SharedViewEventEmitter emitter) {
   BOOL _showDebugInfo;
   CADisplayLink* _Nullable _displayLink;
   UIImageView* _Nullable _backgroundImageView;
-  UIView* _Nullable _paperTemplateView;
-  UIView* _Nullable _pdfBackgroundView;
-  CGFloat _lastPDFZoomScale;
+  PaperTemplateView* _Nullable _paperTemplateView;
+  PDFDocumentBackgroundView* _Nullable _pdfBackgroundView;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -364,9 +85,9 @@ getEmitter(const SharedViewEventEmitter emitter) {
       _toolPicker.selectedTool = defaultTool;
     }
 
-    NSBundle* bundle = [NSBundle bundleForClass:[self class]];
-    NSString* pdfPath = [bundle pathForResource:@"sample_final" ofType:@"pdf"];
-    [self setupPDFBackground:pdfPath];
+    // NSBundle* bundle = [NSBundle bundleForClass:[self class]];
+    // NSString* pdfPath = [bundle pathForResource:@"sample_final" ofType:@"pdf"];
+    // [self setupPDFBackground:pdfPath];
 
     [self setupPaperTemplateWithType:_paperTemplate backgroundColor:[UIColor whiteColor]];
     // Setup background image before setting contentView
@@ -420,7 +141,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
   }
   _paperTemplateView = [[PaperTemplateView alloc]
         initWithFrame:CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height)
-         templateType:templateType
+         templateType:toPaperTemplateType(templateType)
       backgroundColor:backgroundColor];
   _paperTemplateView.userInteractionEnabled = NO;
   [_view addSubview:_paperTemplateView];
@@ -449,50 +170,15 @@ getEmitter(const SharedViewEventEmitter emitter) {
   if (!pdfView.document)
     return;
 
-  // Set content size to match PDF dimensions
-  // Width matches view, height is total PDF height
-  // CGFloat viewWidth = _view.contentSize.width;
-  // CGFloat scale = viewWidth / pdfView.pageWidth;
-  // CGFloat scaledHeight = pdfView.totalHeight * scale;
-
-  // _view.contentSize = CGSizeMake(viewWidth, scaledHeight);
-
   // Set PDF view frame to match content
   pdfView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
   pdfView.zoomScale = _view.zoomScale;
-  // pdfView.transform = CGAffineTransformMakeScale(scale, scale);
   pdfView.userInteractionEnabled = NO;
 
   _pdfBackgroundView = pdfView;
   [_view addSubview:_pdfBackgroundView];
   [_view sendSubviewToBack:_pdfBackgroundView];
 }
-
-// - (void)setupBackgroundImage {
-//   // Only setup if showLinedPaper is enabled
-//   if (!_showLinedPaper) {
-//     return;
-//   }
-
-//   // Load the background image from the bundle
-//   UIImage* backgroundImage = [UIImage imageNamed:@"pencilkit_background"
-//                                         inBundle:[NSBundle bundleForClass:[self class]]
-//                    compatibleWithTraitCollection:nil];
-
-//   if (backgroundImage) {
-//     // Create an image view with size adjusted for current zoom scale
-//     CGFloat scale = _view.zoomScale;
-//     _backgroundImageView =
-//         [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 20000 * scale, 20000 * scale)];
-//     _backgroundImageView.image = backgroundImage;
-//     _backgroundImageView.contentMode = UIViewContentModeScaleToFill;
-//     _backgroundImageView.userInteractionEnabled = NO;
-
-//     // Add the image view to the canvas and send it to the back
-//     [_view addSubview:_backgroundImageView];
-//     [_view sendSubviewToBack:_backgroundImageView];
-//   }
-// }
 
 - (void)startDebugUpdates {
   if (!_displayLink) {
@@ -536,22 +222,22 @@ getEmitter(const SharedViewEventEmitter emitter) {
   // PDF Debug Info
   [debugText appendString:@"── PDF Background ──\n"];
   if (_pdfBackgroundView) {
-    PDFDocumentBackgroundView* pdfView = (PDFDocumentBackgroundView*)_pdfBackgroundView;
     [debugText appendFormat:@"View: EXISTS\n"];
-    [debugText appendFormat:@"Document: %@\n", pdfView.document ? @"LOADED" : @"NULL"];
-    if (pdfView.document) {
-      [debugText appendFormat:@"Pages: %lu\n", (unsigned long)pdfView.document.pageCount];
-      [debugText appendFormat:@"PageWidth: %.1f\n", pdfView.pageWidth];
-      [debugText appendFormat:@"TotalHeight: %.1f\n", pdfView.totalHeight];
+    [debugText appendFormat:@"Document: %@\n", _pdfBackgroundView.document ? @"LOADED" : @"NULL"];
+    if (_pdfBackgroundView.document) {
+      [debugText
+          appendFormat:@"Pages: %lu\n", (unsigned long)_pdfBackgroundView.document.pageCount];
+      [debugText appendFormat:@"PageWidth: %.1f\n", _pdfBackgroundView.pageWidth];
+      [debugText appendFormat:@"TotalHeight: %.1f\n", _pdfBackgroundView.totalHeight];
     }
-    CGRect pdfFrame = pdfView.frame;
+    CGRect pdfFrame = _pdfBackgroundView.frame;
     [debugText appendFormat:@"Frame: (%.1f,%.1f) %.1fx%.1f\n", pdfFrame.origin.x, pdfFrame.origin.y,
                             pdfFrame.size.width, pdfFrame.size.height];
-    CGAffineTransform t = pdfView.transform;
+    CGAffineTransform t = _pdfBackgroundView.transform;
     [debugText appendFormat:@"Transform: [%.2f,%.2f,%.2f,%.2f]\n", t.a, t.b, t.c, t.d];
-    [debugText appendFormat:@"Hidden: %@\n", pdfView.hidden ? @"YES" : @"NO"];
-    [debugText appendFormat:@"Alpha: %.2f\n", pdfView.alpha];
-    [debugText appendFormat:@"Superview: %@\n", pdfView.superview ? @"YES" : @"NO"];
+    [debugText appendFormat:@"Hidden: %@\n", _pdfBackgroundView.hidden ? @"YES" : @"NO"];
+    [debugText appendFormat:@"Alpha: %.2f\n", _pdfBackgroundView.alpha];
+    [debugText appendFormat:@"Superview: %@\n", _pdfBackgroundView.superview ? @"YES" : @"NO"];
   } else {
     [debugText appendString:@"View: NULL\n"];
     // Check if PDF path exists
@@ -652,15 +338,13 @@ getEmitter(const SharedViewEventEmitter emitter) {
 
   if (_pdfBackgroundView) {
     _pdfBackgroundView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
-
-    // _pdfBackgroundView.layer.contents = nil;
     [_pdfBackgroundView.layer setNeedsDisplay];
   }
 
   // Force paper template to redraw completely after zoom ends
   // CATiledLayer caches tiles, so we need to clear and redraw
   if (_paperTemplateView) {
-    ((PaperTemplateView*)_paperTemplateView).zoomScale = _view.zoomScale;
+    _paperTemplateView.zoomScale = _view.zoomScale;
     _paperTemplateView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
     _paperTemplateView.layer.contents = nil;
     [_paperTemplateView.layer setNeedsDisplay];
@@ -680,7 +364,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
 
   if (_pdfBackgroundView) {
     _pdfBackgroundView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
-    ((PDFDocumentBackgroundView*)_pdfBackgroundView).zoomScale = _view.zoomScale;
+    _pdfBackgroundView.zoomScale = _view.zoomScale;
   }
 
   // Update background image size to match zoom level
@@ -771,34 +455,24 @@ getEmitter(const SharedViewEventEmitter emitter) {
       [self stopDebugUpdates];
     }
   }
+
+  if (prev.pdfPath != next.pdfPath) {
+    if (next.pdfPath.empty()) {
+      if (_pdfBackgroundView) {
+        [_pdfBackgroundView removeFromSuperview];
+        _pdfBackgroundView = nil;
+      }
+    } else {
+      NSString* pdfPath = [NSString stringWithUTF8String:next.pdfPath.c_str()];
+      [self setupPDFBackground:pdfPath];
+    }
+  }
+
   if (prev.paperTemplate != next.paperTemplate) {
     _paperTemplate = next.paperTemplate;
     [self setupPaperTemplateWithType:_paperTemplate
                      backgroundColor:intToColor(next.backgroundColor)];
   }
-
-  // if (prev.showLinedPaper ^ next.showLinedPaper) {
-  //   _showLinedPaper = next.showLinedPaper;
-
-  //   // Remove existing paper template view
-  //   if (_paperTemplateView) {
-  //     [_paperTemplateView removeFromSuperview];
-  //     _paperTemplateView = nil;
-  //   }
-
-  //   if (next.showLinedPaper) {
-  //     [self setupPaperTemplateWithType:PaperTemplateTypeDotted backgroundColor:[UIColor
-  //     whiteColor]];
-  //     // Enable background image
-  //     [self setupBackgroundImage];
-  //   } else {
-  //     // Disable background image
-  //     if (_backgroundImageView) {
-  //       [_backgroundImageView removeFromSuperview];
-  //       _backgroundImageView = nil;
-  //     }
-  //   }
-  // }
 
   [super updateProps:props oldProps:oldProps];
 }
@@ -983,10 +657,6 @@ getEmitter(const SharedViewEventEmitter emitter) {
   };
 }
 
-// - (NSString*)getBase64PngData:(double)scale {
-//   return [self getBase64PngData:scale x:0 y:0 width:0 height:0];
-// }
-
 - (NSString*)getBase64PngData:(double)scale
                             x:(double)x
                             y:(double)y
@@ -1076,13 +746,11 @@ getEmitter(const SharedViewEventEmitter emitter) {
 
     [_view.undoManager removeAllActions];
     [_view setDrawing:drawing];
-    // [self updateContentInset];
     return YES;
   }
 }
 
 - (PKCanvasView*)copyCanvas:(PKCanvasView*)v {
-  // PKCanvasView* newView = [[PKCanvasView alloc] initWithFrame:v.frame];
   PKIsolatedCanvasView* newView = [[PKIsolatedCanvasView alloc] initWithFrame:v.frame];
   newView.alwaysBounceVertical = v.alwaysBounceVertical;
   newView.alwaysBounceHorizontal = v.alwaysBounceHorizontal;
@@ -1101,7 +769,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
 
   // Setup PDF background view for the new canvas
   if (_pdfBackgroundView) {
-    PDFDocumentBackgroundView* oldPdfView = (PDFDocumentBackgroundView*)_pdfBackgroundView;
+    PDFDocumentBackgroundView* oldPdfView = _pdfBackgroundView;
     PDFDocumentBackgroundView* newPdfBackgroundView = [[PDFDocumentBackgroundView alloc]
         initWithFrame:oldPdfView.frame
               pdfPath:nil]; // Document is already loaded, we'll copy it
@@ -1125,7 +793,7 @@ getEmitter(const SharedViewEventEmitter emitter) {
 
   // Setup paper template view for the new canvas
   if (_paperTemplateView) {
-    PaperTemplateView* oldPaperView = (PaperTemplateView*)_paperTemplateView;
+    PaperTemplateView* oldPaperView = _paperTemplateView;
     PaperTemplateView* newPaperTemplateView =
         [[PaperTemplateView alloc] initWithFrame:_paperTemplateView.frame
                                     templateType:oldPaperView.templateType
