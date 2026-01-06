@@ -54,6 +54,7 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
   UIImageView* _Nullable _backgroundImageView;
   PaperTemplateView* _Nullable _paperTemplateView;
   PDFDocumentBackgroundView* _Nullable _pdfBackgroundView;
+  NSString* _Nullable _pdfPath;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -170,9 +171,13 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
   if (!pdfView.document)
     return;
 
+  CGFloat scalingFactor = _view.bounds.size.width / pdfView.pageWidth;
+  CGSize newSize = CGSizeMake(_view.bounds.size.width, pdfView.totalHeight * scalingFactor);
+  _view.contentSize = newSize;
+
   // Set PDF view frame to match content
-  pdfView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
-  pdfView.zoomScale = _view.zoomScale;
+  pdfView.frame = CGRectMake(0, 0, newSize.width, newSize.height);
+  // pdfView.zoomScale = _view.zoomScale;
   pdfView.userInteractionEnabled = NO;
 
   _pdfBackgroundView = pdfView;
@@ -241,11 +246,9 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
   } else {
     [debugText appendString:@"View: NULL\n"];
     // Check if PDF path exists
-    NSBundle* bundle = [NSBundle bundleForClass:[self class]];
-    NSString* pdfPath = [bundle pathForResource:@"Transcript" ofType:@"pdf"];
-    [debugText appendFormat:@"Path: %@\n", pdfPath ? @"FOUND" : @"NOT FOUND"];
-    if (pdfPath) {
-      [debugText appendFormat:@"  %@\n", [pdfPath lastPathComponent]];
+    [debugText appendFormat:@"Path: %@\n", _pdfPath ? @"FOUND" : @"NOT FOUND"];
+    if (_pdfPath) {
+      [debugText appendFormat:@"  %@\n", [_pdfPath lastPathComponent]];
     }
   }
   [debugText appendString:@"\n"];
@@ -354,9 +357,15 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
 - (void)scrollViewDidZoom:(UIScrollView*)scrollView {
   // Update insets to match zoom level
   if (_allowInfiniteScroll && _infScrollDir == RNPencilKitInfiniteScrollDirection::Vertical) {
-    _view.contentInset = UIEdgeInsetsMake(_lastEdgeInsets.top / _view.zoomScale,
-                                          _lastEdgeInsets.left / _view.zoomScale, 0,
-                                          _lastEdgeInsets.right / _view.zoomScale);
+    // Update content inset based on content size vs bounds
+    CGFloat horizontalInset = 0;
+    if (_view.contentSize.width < _view.bounds.size.width) {
+      horizontalInset = (_view.bounds.size.width - _view.contentSize.width) / 2.0;
+    }
+
+    CGFloat topInset = (_view.bounds.size.height / 3.0) / _view.zoomScale;
+
+    _view.contentInset = UIEdgeInsetsMake(topInset, horizontalInset, 0, horizontalInset);
   }
   if (_paperTemplateView) {
     _paperTemplateView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
@@ -364,7 +373,16 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
 
   if (_pdfBackgroundView) {
     _pdfBackgroundView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
-    _pdfBackgroundView.zoomScale = _view.zoomScale;
+    // Update content inset based on content size vs bounds
+    CGFloat horizontalInset = 0;
+    if (_view.contentSize.width < _view.bounds.size.width) {
+      horizontalInset = (_view.bounds.size.width - _view.contentSize.width) / 2.0;
+    }
+
+    CGFloat topInset = (_view.bounds.size.height / 3.0) / _view.zoomScale;
+
+    _view.contentInset = UIEdgeInsetsMake(topInset, horizontalInset, 0, horizontalInset);
+    // _pdfBackgroundView.zoomScale = _view.zoomScale;
   }
 
   // Update background image size to match zoom level
@@ -458,12 +476,14 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
 
   if (prev.pdfPath != next.pdfPath) {
     if (next.pdfPath.empty()) {
+      _pdfPath = nil;
       if (_pdfBackgroundView) {
         [_pdfBackgroundView removeFromSuperview];
         _pdfBackgroundView = nil;
       }
     } else {
       NSString* pdfPath = [NSString stringWithUTF8String:next.pdfPath.c_str()];
+      _pdfPath = pdfPath;
       [self setupPDFBackground:pdfPath];
     }
   }
@@ -514,8 +534,10 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
   }
 
   // Update PDF background view frame on layout
-  if (_pdfBackgroundView) {
-    _pdfBackgroundView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
+  if (_pdfPath) {
+    // _pdfBackgroundView.frame = CGRectMake(0, 0, _view.contentSize.width,
+    // _view.contentSize.height);
+    [self setupPDFBackground:_pdfPath];
   }
 
   if (_allowInfiniteScroll)
@@ -739,36 +761,56 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
   if (error || !drawing) {
     return NO;
   } else {
-    PKCanvasView* newCanvas = [self copyCanvas:_view];
+    PKIsolatedCanvasView* newCanvas = [self copyCanvas:_view];
     [_view removeFromSuperview];
     _view = newCanvas;
     self.contentView = newCanvas;
 
     [_view.undoManager removeAllActions];
     [_view setDrawing:drawing];
+    // Scroll to appropriate position after loading drawing
+    if (!CGRectIsEmpty(_view.drawing.bounds) &&
+        !CGSizeEqualToSize(_view.drawing.bounds.size, CGSizeZero)) {
+      // Drawing has content, scroll to its origin
+      CGPoint drawingOrigin = CGPointMake(_view.drawing.bounds.origin.x * _view.zoomScale,
+                                          _view.drawing.bounds.origin.y * _view.zoomScale);
+      [_view setContentOffset:drawingOrigin animated:NO];
+    } else {
+      // No drawing content
+      if (_pdfPath || _infScrollDir == RNPencilKitInfiniteScrollDirection::Vertical) {
+        // If PDF is loaded or vertical infinite scroll is enabled, start at origin
+        [_view setContentOffset:CGPointMake(0, 0) animated:NO];
+      } else {
+        // Otherwise, scroll to center of content size
+        CGFloat centerX = (_view.contentSize.width - _view.bounds.size.width) / 2.0;
+        CGFloat centerY = (_view.contentSize.height - _view.bounds.size.height) / 2.0;
+        [_view setContentOffset:CGPointMake(centerX, centerY) animated:NO];
+      }
+    }
+    [self updateContentInset];
     return YES;
   }
 }
 
-- (PKCanvasView*)copyCanvas:(PKCanvasView*)v {
+- (PKIsolatedCanvasView*)copyCanvas:(PKIsolatedCanvasView*)v {
   PKIsolatedCanvasView* newView = [[PKIsolatedCanvasView alloc] initWithFrame:v.frame];
   newView.alwaysBounceVertical = v.alwaysBounceVertical;
   newView.alwaysBounceHorizontal = v.alwaysBounceHorizontal;
+  newView.bouncesZoom = v.bouncesZoom;
   [newView setRulerActive:v.isRulerActive];
   [newView setBackgroundColor:v.backgroundColor];
   [newView setDrawingPolicy:v.drawingPolicy];
   [newView setOpaque:v.isOpaque];
   newView.contentSize =
       CGSizeMake(v.contentSize.width / v.zoomScale, v.contentSize.height / v.zoomScale);
-  newView.contentInset = v.contentInset;
+  // newView.contentInset = v.contentInset;
   newView.minimumZoomScale = v.minimumZoomScale;
   newView.maximumZoomScale = v.maximumZoomScale;
-  newView.zoomScale = v.zoomScale;
+  newView.zoomScale = 1.0;
   newView.bounds = v.bounds;
   newView.delegate = self;
-
   // Setup PDF background view for the new canvas
-  if (_pdfBackgroundView) {
+  if (_pdfBackgroundView && _pdfPath) {
     PDFDocumentBackgroundView* oldPdfView = _pdfBackgroundView;
     PDFDocumentBackgroundView* newPdfBackgroundView = [[PDFDocumentBackgroundView alloc]
         initWithFrame:oldPdfView.frame
