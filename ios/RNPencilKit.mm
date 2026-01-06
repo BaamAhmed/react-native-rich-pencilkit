@@ -689,9 +689,9 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
     return nil;
   }
 
+  // Calculate the capture rect in content coordinates (unzoomed)
   CGRect rect;
   if (width > 0 && height > 0) {
-
     rect = CGRectMake((_view.bounds.origin.x + x) / _view.zoomScale,
                       (_view.bounds.origin.y + y) / _view.zoomScale, width / _view.zoomScale,
                       height / _view.zoomScale);
@@ -702,10 +702,110 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
         _view.bounds.size.width / _view.zoomScale, _view.bounds.size.height / _view.zoomScale);
   }
 
-  UIImage* image = [_view.drawing imageFromRect:rect
-                                          scale:scale == 0 ? UIScreen.mainScreen.scale : scale];
+  CGFloat imageScale = scale == 0 ? UIScreen.mainScreen.scale : scale;
+
+  // If we have a PDF background, composite both layers
+  if (_pdfBackgroundView && _pdfBackgroundView.document && _pdfBackgroundView.pageWidth > 0) {
+    UIImage* compositeImage = [self renderCompositeImageForRect:rect scale:imageScale];
+    if (compositeImage) {
+      NSData* imageData = UIImagePNGRepresentation(compositeImage);
+      return [imageData base64EncodedStringWithOptions:0];
+    }
+  }
+
+  // Fallback: just return the drawing without background
+  UIImage* image = [_view.drawing imageFromRect:rect scale:imageScale];
   NSData* imageData = UIImagePNGRepresentation(image);
   return [imageData base64EncodedStringWithOptions:0];
+}
+
+/// Renders a composite image with the PDF background and drawing strokes overlaid.
+/// @param rect The capture rectangle in content coordinates (unzoomed)
+/// @param scale The scale factor for the output image
+/// @return A composite UIImage with both PDF and drawing, or nil on failure
+- (UIImage*)renderCompositeImageForRect:(CGRect)rect scale:(CGFloat)scale {
+  // The output image size in pixels
+  CGSize outputSize = CGSizeMake(rect.size.width * scale, rect.size.height * scale);
+
+  if (outputSize.width <= 0 || outputSize.height <= 0) {
+    return nil;
+  }
+
+  // Create a bitmap context to draw into
+  UIGraphicsBeginImageContextWithOptions(rect.size, YES, scale);
+  CGContextRef context = UIGraphicsGetCurrentContext();
+  if (!context) {
+    UIGraphicsEndImageContext();
+    return nil;
+  }
+
+  // Fill with white background first (in case PDF doesn't cover the entire area)
+  [[UIColor whiteColor] setFill];
+  UIRectFill(CGRectMake(0, 0, rect.size.width, rect.size.height));
+
+  // Render the PDF background for the requested rect
+  [self renderPDFToContext:context forRect:rect];
+
+  // Render the drawing on top with transparency
+  UIImage* drawingImage = [_view.drawing imageFromRect:rect scale:scale];
+  if (drawingImage) {
+    [drawingImage drawInRect:CGRectMake(0, 0, rect.size.width, rect.size.height)];
+  }
+
+  UIImage* compositeImage = UIGraphicsGetImageFromCurrentImageContext();
+  UIGraphicsEndImageContext();
+
+  return compositeImage;
+}
+
+/// Renders the PDF pages that intersect the given rect into the current graphics context.
+/// The context should already be set up with the correct size matching rect.size.
+/// @param context The graphics context to render into
+/// @param rect The capture rectangle in content coordinates (unzoomed)
+- (void)renderPDFToContext:(CGContextRef)context forRect:(CGRect)rect {
+  if (!_pdfBackgroundView || !_pdfBackgroundView.document || _pdfBackgroundView.pageWidth <= 0) {
+    return;
+  }
+
+  PDFDocument* document = _pdfBackgroundView.document;
+  NSArray<NSNumber*>* pageYOffsets = _pdfBackgroundView.pageYOffsets;
+  CGFloat pageWidth = _pdfBackgroundView.pageWidth;
+
+  // Calculate the scale factor used to fit PDF to view width
+  CGFloat fitScale = _view.bounds.size.width / pageWidth;
+
+  // Iterate through pages and render those that intersect our capture rect
+  for (NSInteger i = 0; i < document.pageCount; i++) {
+    CGFloat pageY = [pageYOffsets[i] floatValue];
+    PDFPage* page = [document pageAtIndex:i];
+    CGRect pageBounds = [page boundsForBox:kPDFDisplayBoxMediaBox];
+
+    // Page frame in scaled (content) coordinates - matches PDFDocumentBackgroundView's logic
+    CGRect pageFrame = CGRectMake(0, pageY * fitScale, pageBounds.size.width * fitScale,
+                                  pageBounds.size.height * fitScale);
+
+    // Skip pages that don't intersect our capture rect
+    if (!CGRectIntersectsRect(rect, pageFrame)) {
+      continue;
+    }
+
+    // Draw this page
+    // We need to transform coordinates: our context origin is at rect.origin,
+    // so we offset by -rect.origin to put content at correct position
+    CGContextSaveGState(context);
+
+    // Translate so that rect.origin becomes (0,0) in our context
+    CGContextTranslateCTM(context, -rect.origin.x, -rect.origin.y);
+
+    // Apply the same transforms as PDFDocumentBackgroundView's drawRect
+    CGContextScaleCTM(context, fitScale, fitScale);
+    CGContextTranslateCTM(context, 0, pageY + pageBounds.size.height);
+    CGContextScaleCTM(context, 1.0, -1.0);
+
+    [page drawWithBox:kPDFDisplayBoxMediaBox toContext:context];
+
+    CGContextRestoreGState(context);
+  }
 }
 
 - (NSString*)getBase64JpegData:(double)scale compression:(double)compression {
