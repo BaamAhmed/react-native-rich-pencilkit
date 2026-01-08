@@ -333,6 +333,10 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
     _view.contentInset = UIEdgeInsetsZero;
 }
 
+- (void)scrollViewWillEndZooming:(UIScrollView*)scrollView withView:(UIView*)view {
+  _pdfBackgroundView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
+}
+
 - (void)scrollViewDidEndZooming:(UIScrollView*)scrollView
                        withView:(UIView*)view
                         atScale:(CGFloat)scale {
@@ -340,7 +344,7 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
   [self updateContentInset];
 
   if (_pdfBackgroundView) {
-    _pdfBackgroundView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
+    _pdfBackgroundView.layer.contents = nil;
     [_pdfBackgroundView.layer setNeedsDisplay];
   }
 
