@@ -22,6 +22,7 @@ export interface Spec extends TurboModule {
   saveDrawing(viewId: Double, path: string): Promise<string>;
   loadDrawing(viewId: Double, path: string): Promise<void>;
   loadBase64Data(viewId: Double, base64: string): Promise<void>;
+  exportToPDF(viewId: Double, path: string, scale: Double): Promise<string>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('RNPencilKitUtil');

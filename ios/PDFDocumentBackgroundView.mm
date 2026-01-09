@@ -29,6 +29,7 @@
     CATiledLayer* tiledLayer = (CATiledLayer*)self.layer;
     tiledLayer.tileSize = CGSizeMake(1024, 1024);
     tiledLayer.levelsOfDetail = 1;
+    tiledLayer.backgroundColor = [UIColor whiteColor].CGColor;
   }
   return self;
 }

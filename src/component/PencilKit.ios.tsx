@@ -89,6 +89,11 @@ function PencilKitComponent(
 
         return NativeRNPencilKitUtil.loadBase64Data(handle, base64);
       },
+      exportToPDF: async ({ path, scale = 2 }) => {
+        const handle = findNodeHandle(nativeRef.current) ?? -1;
+
+        return NativeRNPencilKitUtil.exportToPDF(handle, path, scale);
+      },
       setTool: ({ color, toolType, width }) =>
         Commands.setTool(
           nativeRef.current!,

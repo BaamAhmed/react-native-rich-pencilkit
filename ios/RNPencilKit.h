@@ -24,6 +24,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSString*)saveDrawing:(nonnull NSString*)path;
 - (BOOL)loadDrawing:(nonnull NSString*)path;
 - (BOOL)loadBase64Data:(nonnull NSString*)base64;
+- (NSString* _Nullable)exportToPDF:(nonnull NSString*)outputPath scale:(double)scale;
 @end
 
 NS_ASSUME_NONNULL_END

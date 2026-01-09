@@ -73,6 +73,7 @@ export type PencilKitRef = {
   }>;
   getBase64JpegData: (params?: { scale?: number; compression?: number }) => Promise<string>;
   loadBase64Data: (base64: string) => Promise<void>;
+  exportToPDF: (params: { path: string; scale?: number }) => Promise<string>;
 };
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const PencilKit = forwardRef((props: PencilKitProps, ref: ForwardedRef<PencilKitRef>) => {

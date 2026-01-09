@@ -896,6 +896,282 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
   }
 }
 
+- (NSString*)exportToPDF:(NSString*)outputPath scale:(double)scale {
+  if (!outputPath || outputPath.length == 0) {
+    return nil;
+  }
+
+  // Ensure the parent directory exists
+  NSString* parentDirectory = [outputPath stringByDeletingLastPathComponent];
+  NSFileManager* fileManager = [NSFileManager defaultManager];
+  if (![fileManager fileExistsAtPath:parentDirectory]) {
+    NSError* error = nil;
+    BOOL created = [fileManager createDirectoryAtPath:parentDirectory
+                          withIntermediateDirectories:YES
+                                           attributes:nil
+                                                error:&error];
+    if (!created || error) {
+      NSLog(@"exportToPDF: Failed to create directory %@: %@", parentDirectory, error);
+      return nil;
+    }
+  }
+
+  CGFloat exportScale = scale > 0 ? scale : 2.0;
+
+  // Determine export bounds and create PDF
+  if (_pdfBackgroundView && _pdfBackgroundView.document && _pdfBackgroundView.pageWidth > 0) {
+    // PDF Background mode - create multi-page PDF with drawing overlaid
+    return [self exportPDFWithPDFBackground:outputPath scale:exportScale];
+  } else {
+    // Paper template or blank mode - create single page PDF
+    return [self exportPDFWithPaperTemplate:outputPath scale:exportScale];
+  }
+}
+
+/// Export PDF when a PDF document is used as background
+- (NSString*)exportPDFWithPDFBackground:(NSString*)outputPath scale:(CGFloat)scale {
+  PDFDocument* sourceDocument = _pdfBackgroundView.document;
+  NSArray<NSNumber*>* pageYOffsets = _pdfBackgroundView.pageYOffsets;
+  CGFloat pageWidth = _pdfBackgroundView.pageWidth;
+  CGFloat fitScale = _view.bounds.size.width / pageWidth;
+
+  // Create a new PDF document
+  PDFDocument* outputDocument = [[PDFDocument alloc] init];
+
+  for (NSInteger i = 0; i < sourceDocument.pageCount; i++) {
+    PDFPage* sourcePage = [sourceDocument pageAtIndex:i];
+    CGRect pageBounds = [sourcePage boundsForBox:kPDFDisplayBoxMediaBox];
+    CGFloat pageY = [pageYOffsets[i] floatValue];
+
+    // Page frame in content coordinates (scaled to fit view width)
+    CGRect pageFrameInContent = CGRectMake(0, pageY * fitScale, pageBounds.size.width * fitScale,
+                                           pageBounds.size.height * fitScale);
+
+    // Create image for this page (background + drawing)
+    UIImage* pageImage = [self renderPageImage:sourcePage
+                                    pageBounds:pageBounds
+                            pageFrameInContent:pageFrameInContent
+                                         scale:scale];
+
+    if (pageImage) {
+      PDFPage* newPage = [[PDFPage alloc] initWithImage:pageImage];
+      if (newPage) {
+        [outputDocument insertPage:newPage atIndex:i];
+      }
+    }
+  }
+
+  // Write to file
+  NSURL* outputURL = [NSURL fileURLWithPath:outputPath];
+  BOOL success = [outputDocument writeToURL:outputURL];
+
+  return success ? outputPath : nil;
+}
+
+/// Render a single PDF page with drawing overlaid
+- (UIImage*)renderPageImage:(PDFPage*)sourcePage
+                 pageBounds:(CGRect)pageBounds
+         pageFrameInContent:(CGRect)pageFrameInContent
+                      scale:(CGFloat)scale {
+
+  // Output size matches original PDF page dimensions
+  CGSize outputSize = pageBounds.size;
+
+  UIGraphicsBeginImageContextWithOptions(outputSize, YES, scale);
+  CGContextRef context = UIGraphicsGetCurrentContext();
+  if (!context) {
+    UIGraphicsEndImageContext();
+    return nil;
+  }
+
+  // Fill with white background
+  [[UIColor whiteColor] setFill];
+  UIRectFill(CGRectMake(0, 0, outputSize.width, outputSize.height));
+
+  // Draw the source PDF page
+  CGContextSaveGState(context);
+  // Flip coordinate system for PDF
+  CGContextTranslateCTM(context, 0, outputSize.height);
+  CGContextScaleCTM(context, 1.0, -1.0);
+  [sourcePage drawWithBox:kPDFDisplayBoxMediaBox toContext:context];
+  CGContextRestoreGState(context);
+
+  // Calculate the scale factor from content coordinates to PDF page coordinates
+  CGFloat contentToPageScale = pageBounds.size.width / pageFrameInContent.size.width;
+
+  // Render drawing strokes that intersect this page
+  // Convert page frame in content coordinates to drawing coordinates
+  CGRect drawingRect = pageFrameInContent;
+
+  // Get drawing image for this region
+  UIImage* drawingImage = [_view.drawing imageFromRect:drawingRect
+                                                 scale:scale * contentToPageScale];
+
+  if (drawingImage) {
+    // Draw the strokes on top
+    [drawingImage drawInRect:CGRectMake(0, 0, outputSize.width, outputSize.height)];
+  }
+
+  UIImage* compositeImage = UIGraphicsGetImageFromCurrentImageContext();
+  UIGraphicsEndImageContext();
+
+  return compositeImage;
+}
+
+/// Export PDF when using paper template or blank background
+- (NSString*)exportPDFWithPaperTemplate:(NSString*)outputPath scale:(CGFloat)scale {
+  // Determine page bounds based on drawing content or content size
+  CGRect exportRect;
+  CGRect drawingBounds = _view.drawing.bounds;
+
+  if (CGRectIsEmpty(drawingBounds) || CGSizeEqualToSize(drawingBounds.size, CGSizeZero)) {
+    // No drawing - export the visible content area
+    exportRect = CGRectMake(0, 0, _view.bounds.size.width, _view.bounds.size.height);
+  } else {
+    // Has drawing - include some padding around the drawing
+    CGFloat padding = 50.0;
+    exportRect = CGRectInset(drawingBounds, -padding, -padding);
+    // Ensure origin is not negative
+    exportRect.origin.x = MAX(0, exportRect.origin.x);
+    exportRect.origin.y = MAX(0, exportRect.origin.y);
+  }
+
+  // Create the page image
+  UIImage* pageImage = [self renderPaperTemplatePageImage:exportRect scale:scale];
+  if (!pageImage) {
+    return nil;
+  }
+
+  // Create PDF document with this image
+  PDFDocument* outputDocument = [[PDFDocument alloc] init];
+  PDFPage* page = [[PDFPage alloc] initWithImage:pageImage];
+  if (!page) {
+    return nil;
+  }
+
+  [outputDocument insertPage:page atIndex:0];
+
+  // Write to file
+  NSURL* outputURL = [NSURL fileURLWithPath:outputPath];
+  BOOL success = [outputDocument writeToURL:outputURL];
+
+  return success ? outputPath : nil;
+}
+
+/// Render paper template background with drawing overlaid
+- (UIImage*)renderPaperTemplatePageImage:(CGRect)rect scale:(CGFloat)scale {
+  CGSize outputSize = rect.size;
+
+  if (outputSize.width <= 0 || outputSize.height <= 0) {
+    return nil;
+  }
+
+  UIGraphicsBeginImageContextWithOptions(outputSize, YES, scale);
+  CGContextRef context = UIGraphicsGetCurrentContext();
+  if (!context) {
+    UIGraphicsEndImageContext();
+    return nil;
+  }
+
+  // Always fill with white background first (opaque context defaults to black)
+  [[UIColor whiteColor] setFill];
+  UIRectFill(CGRectMake(0, 0, outputSize.width, outputSize.height));
+
+  // Render the paper template background
+  [self renderPaperTemplateToContext:context forRect:rect];
+
+  // Render drawing strokes on top
+  UIImage* drawingImage = [_view.drawing imageFromRect:rect scale:scale];
+  if (drawingImage) {
+    [drawingImage drawInRect:CGRectMake(0, 0, outputSize.width, outputSize.height)];
+  }
+
+  UIImage* compositeImage = UIGraphicsGetImageFromCurrentImageContext();
+  UIGraphicsEndImageContext();
+
+  return compositeImage;
+}
+
+/// Render paper template pattern to a graphics context
+- (void)renderPaperTemplateToContext:(CGContextRef)context forRect:(CGRect)rect {
+  // Get the background color from paper template view, ensure it's not nil/clear
+  UIColor* bgColor = [UIColor whiteColor]; // Default to white
+  if (_paperTemplateView && _paperTemplateView.paperBackgroundColor) {
+    CGFloat alpha = 0;
+    [_paperTemplateView.paperBackgroundColor getRed:nil green:nil blue:nil alpha:&alpha];
+    if (alpha > 0) {
+      bgColor = _paperTemplateView.paperBackgroundColor;
+    }
+  }
+  [bgColor setFill];
+  UIRectFill(CGRectMake(0, 0, rect.size.width, rect.size.height));
+
+  if (!_paperTemplateView) {
+    return;
+  }
+
+  PaperTemplateType templateType = _paperTemplateView.templateType;
+  CGFloat zoomScale = 1.0; // Use base zoom for export
+
+  // Draw template pattern based on type
+  UIColor* patternColor = [UIColor colorWithRed:0.85 green:0.85 blue:0.9 alpha:1.0];
+  [patternColor setFill];
+  [patternColor setStroke];
+
+  switch (templateType) {
+    case PaperTemplateTypeLined: {
+      CGFloat lineHeight = 24.0 * zoomScale;
+      CGFloat lineThickness = 2.0 * zoomScale;
+
+      CGFloat startY = floor(rect.origin.y / lineHeight) * lineHeight - rect.origin.y;
+      for (CGFloat y = startY; y < rect.size.height; y += lineHeight) {
+        CGRect lineRect = CGRectMake(0, y, rect.size.width, lineThickness);
+        UIRectFill(lineRect);
+      }
+      break;
+    }
+    case PaperTemplateTypeDotted: {
+      CGFloat dotSpacing = 24.0 * zoomScale;
+      CGFloat dotRadius = 2.0 * zoomScale;
+
+      CGFloat startX = floor(rect.origin.x / dotSpacing) * dotSpacing - rect.origin.x;
+      CGFloat startY = floor(rect.origin.y / dotSpacing) * dotSpacing - rect.origin.y;
+
+      for (CGFloat y = startY; y < rect.size.height; y += dotSpacing) {
+        for (CGFloat x = startX; x < rect.size.width; x += dotSpacing) {
+          CGRect dotRect = CGRectMake(x - dotRadius, y - dotRadius, dotRadius * 2, dotRadius * 2);
+          UIBezierPath* dotPath = [UIBezierPath bezierPathWithOvalInRect:dotRect];
+          [dotPath fill];
+        }
+      }
+      break;
+    }
+    case PaperTemplateTypeGrid: {
+      CGFloat gridSpacing = 24.0 * zoomScale;
+      CGFloat lineThickness = 1.0 * zoomScale;
+
+      // Horizontal lines
+      CGFloat startY = floor(rect.origin.y / gridSpacing) * gridSpacing - rect.origin.y;
+      for (CGFloat y = startY; y < rect.size.height; y += gridSpacing) {
+        CGRect lineRect = CGRectMake(0, y, rect.size.width, lineThickness);
+        UIRectFill(lineRect);
+      }
+
+      // Vertical lines
+      CGFloat startX = floor(rect.origin.x / gridSpacing) * gridSpacing - rect.origin.x;
+      for (CGFloat x = startX; x < rect.size.width; x += gridSpacing) {
+        CGRect lineRect = CGRectMake(x, 0, lineThickness, rect.size.height);
+        UIRectFill(lineRect);
+      }
+      break;
+    }
+    case PaperTemplateTypeBlank:
+    default:
+      // No pattern for blank
+      break;
+  }
+}
+
 - (PKIsolatedCanvasView*)copyCanvas:(PKIsolatedCanvasView*)v {
   PKIsolatedCanvasView* newView = [[PKIsolatedCanvasView alloc] initWithFrame:v.frame];
   newView.alwaysBounceVertical = v.alwaysBounceVertical;

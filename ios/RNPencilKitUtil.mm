@@ -134,6 +134,22 @@ RCT_EXPORT_MODULE()
   });
 }
 
+- (void)exportToPDF:(double)viewId
+               path:(NSString*)path
+              scale:(double)scale
+            resolve:(RCTPromiseResolveBlock)resolve
+             reject:(RCTPromiseRejectBlock)reject {
+  RCTExecuteOnMainQueue(^{
+    RNPencilKit* view = [self getView:viewId];
+    NSString* ret = [view exportToPDF:path scale:scale];
+    if (ret) {
+      resolve(ret);
+    } else {
+      [self doReject:reject name:@"exportToPDF"];
+    }
+  });
+}
+
 - (NSNumber*)isPencilKitAvailable {
   if (@available(iOS 14, *)) {
     return @(YES);
