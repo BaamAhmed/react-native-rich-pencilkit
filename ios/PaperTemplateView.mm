@@ -26,7 +26,7 @@
 }
 
 - (void)drawLined:(CGRect)rect {
-  CGFloat lineHeight = 24.0 * _zoomScale;
+  CGFloat lineHeight = 36.0 * _zoomScale;
   CGFloat lineThickness = 2.0 * _zoomScale;
   CGFloat width = CGRectGetWidth(self.layer.bounds);
 
@@ -46,7 +46,7 @@
 }
 
 - (void)drawDotted:(CGRect)rect {
-  CGFloat dotSpacing = 24.0 * _zoomScale;
+  CGFloat dotSpacing = 36.0 * _zoomScale;
   CGFloat dotRadius = 2.0 * _zoomScale;
 
   [[UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:1.0] setFill];
@@ -70,7 +70,7 @@
 }
 
 - (void)drawGrid:(CGRect)rect {
-  CGFloat gridSpacing = 24.0 * _zoomScale;
+  CGFloat gridSpacing = 36.0 * _zoomScale;
   CGFloat lineThickness = 1.0 * _zoomScale;
   CGFloat width = CGRectGetWidth(self.layer.bounds);
   CGFloat height = CGRectGetHeight(self.layer.bounds);
