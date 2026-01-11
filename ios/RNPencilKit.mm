@@ -55,6 +55,7 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
   PaperTemplateView* _Nullable _paperTemplateView;
   PDFDocumentBackgroundView* _Nullable _pdfBackgroundView;
   NSString* _Nullable _pdfPath;
+  CGFloat _lastBoundsWidth;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -64,6 +65,7 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
     _view = [[PKIsolatedCanvasView alloc] initWithFrame:frame];
     _view.backgroundColor = [UIColor clearColor];
     _view.bouncesZoom = NO;
+    _lastBoundsWidth = frame.size.width;
 
     _view.delegate = self;
     _toolPicker = [[PKToolPicker alloc] init];
@@ -144,6 +146,11 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
         initWithFrame:CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height)
          templateType:toPaperTemplateType(templateType)
       backgroundColor:backgroundColor];
+  if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Bidirectional && _allowInfiniteScroll) {
+    _paperTemplateView.isInfiniteCanvas = YES;
+  } else {
+    _paperTemplateView.isInfiniteCanvas = NO;
+  }
   _paperTemplateView.userInteractionEnabled = NO;
   [_view addSubview:_paperTemplateView];
   [_view sendSubviewToBack:_paperTemplateView];
@@ -388,12 +395,6 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
     _view.contentInset = UIEdgeInsetsMake(topInset, horizontalInset, 0, horizontalInset);
     // _pdfBackgroundView.zoomScale = _view.zoomScale;
   }
-
-  // Update background image size to match zoom level
-  if (_backgroundImageView) {
-    CGFloat scale = _view.zoomScale;
-    _backgroundImageView.frame = CGRectMake(0, 0, 20000 * scale, 20000 * scale);
-  }
 }
 
 - (UIImage*)loadImageFromPath:(NSString*)imagePath {
@@ -451,11 +452,19 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
   }
   if (prev.infiniteScrollDirection != next.infiniteScrollDirection) {
     _infScrollDir = next.infiniteScrollDirection;
+
     [self applyContentSizeForInfiniteScroll];
     [self updateContentInset];
   }
   if (prev.allowInfiniteScroll ^ next.allowInfiniteScroll) {
     _allowInfiniteScroll = next.allowInfiniteScroll;
+    if (_paperTemplateView && _allowInfiniteScroll) {
+      if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Bidirectional) {
+        _paperTemplateView.isInfiniteCanvas = YES;
+      } else {
+        _paperTemplateView.isInfiniteCanvas = NO;
+      }
+    }
     [self applyContentSizeForInfiniteScroll];
     [self updateContentInset];
   }
@@ -533,19 +542,75 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
 - (void)layoutSubviews {
   [super layoutSubviews];
 
+  CGFloat currentWidth = self.bounds.size.width;
+  BOOL widthChanged =
+      (_lastBoundsWidth > 0 && currentWidth > 0 && fabs(currentWidth - _lastBoundsWidth) > 1.0);
+
+  // if (_paperTemplateView) {
+  //   _paperTemplateView.frame = CGRectMake(0, 0, _view.contentSize.width,
+  //   _view.contentSize.height);
+  // }
+  if (_allowInfiniteScroll) {
+    [self applyContentSizeForInfiniteScroll];
+  }
+
   if (_paperTemplateView) {
+    if (widthChanged) {
+      CGFloat scaleRatio = currentWidth / _lastBoundsWidth;
+      _paperTemplateView.zoomScale = 1.0;
+      _view.zoomScale = 1.0;
+    }
     _paperTemplateView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
+    _paperTemplateView.layer.contents = nil;
+    [_paperTemplateView.layer setNeedsDisplay];
+    if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Vertical) {
+      if (widthChanged && !CGRectIsEmpty(_view.drawing.bounds)) {
+        CGFloat scaleRatio = currentWidth / _lastBoundsWidth;
+        CGAffineTransform scaleTransform = CGAffineTransformMakeScale(scaleRatio, scaleRatio);
+        PKDrawing* transformedDrawing = [_view.drawing drawingByApplyingTransform:scaleTransform];
+        [_view setDrawing:transformedDrawing];
+      }
+
+      _view.zoomScale = 1.0;
+
+      CGFloat horizontalInset = 0;
+      if (_view.contentSize.width < _view.bounds.size.width) {
+        horizontalInset = (_view.bounds.size.width - _view.contentSize.width) / 2.0;
+      }
+
+      CGFloat topInset = (_view.bounds.size.height / 3.0) / _view.zoomScale;
+
+      _view.contentInset = UIEdgeInsetsMake(topInset, horizontalInset, 0, horizontalInset);
+    }
   }
 
   // Update PDF background view frame on layout
-  if (_pdfPath) {
-    // _pdfBackgroundView.frame = CGRectMake(0, 0, _view.contentSize.width,
-    // _view.contentSize.height);
+  if (_pdfPath && _pdfBackgroundView) {
+    // Scale the drawing if width changed (e.g., rotation from landscape to portrait)
+    if (widthChanged && !CGRectIsEmpty(_view.drawing.bounds)) {
+      CGFloat scaleRatio = currentWidth / _lastBoundsWidth;
+      CGAffineTransform scaleTransform = CGAffineTransformMakeScale(scaleRatio, scaleRatio);
+      PKDrawing* transformedDrawing = [_view.drawing drawingByApplyingTransform:scaleTransform];
+      [_view setDrawing:transformedDrawing];
+    }
+
+    _view.zoomScale = 1.0;
     [self setupPDFBackground:_pdfPath];
+
+    CGFloat horizontalInset = 0;
+    if (_view.contentSize.width < _view.bounds.size.width) {
+      horizontalInset = (_view.bounds.size.width - _view.contentSize.width) / 2.0;
+    }
+
+    CGFloat topInset = (_view.bounds.size.height / 3.0) / _view.zoomScale;
+
+    _view.contentInset = UIEdgeInsetsMake(topInset, horizontalInset, 0, horizontalInset);
   }
 
-  if (_allowInfiniteScroll)
-    [self applyContentSizeForInfiniteScroll];
+  // Update the tracked width AFTER all scaling is done
+  if (currentWidth > 0) {
+    _lastBoundsWidth = currentWidth;
+  }
 
   if (_showDebugInfo) {
     [self updateDebugInfo];
@@ -1221,6 +1286,7 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
                                     templateType:oldPaperView.templateType
                                  backgroundColor:oldPaperView.paperBackgroundColor];
     newPaperTemplateView.userInteractionEnabled = NO;
+    newPaperTemplateView.isInfiniteCanvas = oldPaperView.isInfiniteCanvas;
     [newView addSubview:newPaperTemplateView];
     [newView sendSubviewToBack:newPaperTemplateView];
     _paperTemplateView = newPaperTemplateView;

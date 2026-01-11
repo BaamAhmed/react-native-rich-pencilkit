@@ -13,6 +13,9 @@ typedef NS_ENUM(NSInteger, PaperTemplateType) {
 @property(nonatomic, assign) PaperTemplateType templateType;
 @property(nonatomic, strong) UIColor* paperBackgroundColor;
 @property(nonatomic, assign) CGFloat zoomScale;
+@property(nonatomic, assign) CGFloat baseWidth;
+@property(nonatomic, assign) BOOL isInfiniteCanvas;
+
 - (instancetype)initWithFrame:(CGRect)frame
                  templateType:(PaperTemplateType)templateType
               backgroundColor:(UIColor* _Nullable)backgroundColor;

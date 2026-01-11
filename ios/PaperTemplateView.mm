@@ -13,6 +13,8 @@
     _templateType = templateType;
     _paperBackgroundColor = backgroundColor ?: [UIColor clearColor];
     _zoomScale = 1.0;
+    _baseWidth = 1200.0;
+    _isInfiniteCanvas = NO;
 
     [_paperBackgroundColor setFill];
     UIRectFill(frame);
@@ -25,9 +27,9 @@
   return self;
 }
 
-- (void)drawLined:(CGRect)rect {
-  CGFloat lineHeight = 36.0 * _zoomScale;
-  CGFloat lineThickness = 2.0 * _zoomScale;
+- (void)drawLined:(CGRect)rect scale:(CGFloat)scale {
+  CGFloat lineHeight = 36.0 * scale;
+  CGFloat lineThickness = 2.0 * scale;
   CGFloat width = CGRectGetWidth(self.layer.bounds);
 
   [[UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:1.0] setFill];
@@ -45,9 +47,9 @@
   }
 }
 
-- (void)drawDotted:(CGRect)rect {
-  CGFloat dotSpacing = 36.0 * _zoomScale;
-  CGFloat dotRadius = 2.0 * _zoomScale;
+- (void)drawDotted:(CGRect)rect scale:(CGFloat)scale {
+  CGFloat dotSpacing = 36.0 * scale;
+  CGFloat dotRadius = 2.0 * scale;
 
   [[UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:1.0] setFill];
   UIRectFill(rect);
@@ -69,9 +71,9 @@
   }
 }
 
-- (void)drawGrid:(CGRect)rect {
-  CGFloat gridSpacing = 36.0 * _zoomScale;
-  CGFloat lineThickness = 1.0 * _zoomScale;
+- (void)drawGrid:(CGRect)rect scale:(CGFloat)scale {
+  CGFloat gridSpacing = 36.0 * scale;
+  CGFloat lineThickness = 1.0 * scale;
   CGFloat width = CGRectGetWidth(self.layer.bounds);
   CGFloat height = CGRectGetHeight(self.layer.bounds);
 
@@ -99,8 +101,8 @@
   }
 }
 
-- (void)drawBorder:(CGRect)rect {
-  CGFloat borderWidth = 3.0 * _zoomScale;
+- (void)drawBorder:(CGRect)rect scale:(CGFloat)scale {
+  CGFloat borderWidth = 3.0 * scale;
   UIColor* borderColor = [UIColor colorWithRed:0.8 green:0.8 blue:0.85 alpha:1.0];
 
   [[UIColor whiteColor] setFill];
@@ -114,18 +116,20 @@
 }
 
 - (void)drawRect:(CGRect)rect {
-  [self drawBorder:rect];
+  CGFloat scale = _isInfiniteCanvas ? _zoomScale : self.frame.size.width / _baseWidth;
+
+  [self drawBorder:rect scale:scale];
 
   // Draw template pattern based on type
   switch (_templateType) {
     case PaperTemplateTypeLined:
-      [self drawLined:rect];
+      [self drawLined:rect scale:scale];
       break;
     case PaperTemplateTypeDotted:
-      [self drawDotted:rect];
+      [self drawDotted:rect scale:scale];
       break;
     case PaperTemplateTypeGrid:
-      [self drawGrid:rect];
+      [self drawGrid:rect scale:scale];
       break;
     case PaperTemplateTypeBlank:
     default:
