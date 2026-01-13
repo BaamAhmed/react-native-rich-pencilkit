@@ -56,6 +56,8 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
   PDFDocumentBackgroundView* _Nullable _pdfBackgroundView;
   NSString* _Nullable _pdfPath;
   CGFloat _lastBoundsWidth;
+  CGFloat _baseWidth;
+  CGFloat _baseHeight;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -66,6 +68,8 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
     _view.backgroundColor = [UIColor clearColor];
     _view.bouncesZoom = NO;
     _lastBoundsWidth = frame.size.width;
+    _baseWidth = 1200;
+    _baseHeight = 2000;
 
     _view.delegate = self;
     _toolPicker = [[PKToolPicker alloc] init];
@@ -524,7 +528,7 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
   if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Bidirectional) {
     newContentSize = CGSizeMake(20000, 20000);
   } else if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Vertical) {
-    newContentSize = CGSizeMake(width, 20000);
+    newContentSize = CGSizeMake(_baseWidth, 20000);
   } else if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Horizontal) {
     newContentSize = CGSizeMake(20000, height);
   } else {
@@ -553,25 +557,36 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
   if (_allowInfiniteScroll) {
     [self applyContentSizeForInfiniteScroll];
   }
+  // Apply initial zoom based on reference width for vertical infinite scroll or PDF backgrounds
+  // This ensures drawings created at one canvas width display correctly at different widths
+  BOOL isVerticalInfiniteScroll =
+      _allowInfiniteScroll && _infScrollDir == RNPencilKitInfiniteScrollDirection::Vertical;
+  BOOL hasPDFBackground = _pdfPath && _pdfBackgroundView;
+
+  if ((isVerticalInfiniteScroll || hasPDFBackground) && _baseWidth > 0) {
+    CGFloat currentWidth = self.bounds.size.width;
+    if (currentWidth > 0) {
+      CGFloat initialZoom = currentWidth / _baseWidth;
+      _view.minimumZoomScale = 0.25 * initialZoom;
+      _view.maximumZoomScale = 4.0 * initialZoom;
+      [_view setZoomScale:initialZoom animated:NO];
+
+      // Update _lastBoundsWidth so layoutSubviews doesn't re-scale
+      _lastBoundsWidth = currentWidth;
+
+      if (_paperTemplateView) {
+        _paperTemplateView.zoomScale = initialZoom;
+      }
+    }
+  }
 
   if (_paperTemplateView) {
-    if (widthChanged) {
-      CGFloat scaleRatio = currentWidth / _lastBoundsWidth;
-      _paperTemplateView.zoomScale = 1.0;
-      _view.zoomScale = 1.0;
-    }
     _paperTemplateView.frame = CGRectMake(0, 0, _view.contentSize.width, _view.contentSize.height);
     _paperTemplateView.layer.contents = nil;
     [_paperTemplateView.layer setNeedsDisplay];
     if (_infScrollDir == RNPencilKitInfiniteScrollDirection::Vertical) {
-      if (widthChanged && !CGRectIsEmpty(_view.drawing.bounds)) {
-        CGFloat scaleRatio = currentWidth / _lastBoundsWidth;
-        CGAffineTransform scaleTransform = CGAffineTransformMakeScale(scaleRatio, scaleRatio);
-        PKDrawing* transformedDrawing = [_view.drawing drawingByApplyingTransform:scaleTransform];
-        [_view setDrawing:transformedDrawing];
-      }
 
-      _view.zoomScale = 1.0;
+      // _view.zoomScale = 1.0;
 
       CGFloat horizontalInset = 0;
       if (_view.contentSize.width < _view.bounds.size.width) {
@@ -586,15 +601,8 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
 
   // Update PDF background view frame on layout
   if (_pdfPath && _pdfBackgroundView) {
-    // Scale the drawing if width changed (e.g., rotation from landscape to portrait)
-    if (widthChanged && !CGRectIsEmpty(_view.drawing.bounds)) {
-      CGFloat scaleRatio = currentWidth / _lastBoundsWidth;
-      CGAffineTransform scaleTransform = CGAffineTransformMakeScale(scaleRatio, scaleRatio);
-      PKDrawing* transformedDrawing = [_view.drawing drawingByApplyingTransform:scaleTransform];
-      [_view setDrawing:transformedDrawing];
-    }
 
-    _view.zoomScale = 1.0;
+    // _view.zoomScale = 1.0;
     [self setupPDFBackground:_pdfPath];
 
     CGFloat horizontalInset = 0;
@@ -840,8 +848,9 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
   NSArray<NSNumber*>* pageYOffsets = _pdfBackgroundView.pageYOffsets;
   CGFloat pageWidth = _pdfBackgroundView.pageWidth;
 
-  // Calculate the scale factor used to fit PDF to view width
-  CGFloat fitScale = _view.bounds.size.width / pageWidth;
+  // Calculate the scale factor used to fit PDF to base width
+  // Use _baseWidth since drawings are stored relative to base coordinates
+  CGFloat fitScale = _baseWidth / pageWidth;
 
   // Iterate through pages and render those that intersect our capture rect
   for (NSInteger i = 0; i < document.pageCount; i++) {
@@ -937,6 +946,30 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
 
     [_view.undoManager removeAllActions];
     [_view setDrawing:drawing];
+
+    // Apply initial zoom based on reference width for vertical infinite scroll or PDF backgrounds
+    // This ensures drawings created at one canvas width display correctly at different widths
+    BOOL isVerticalInfiniteScroll =
+        _allowInfiniteScroll && _infScrollDir == RNPencilKitInfiniteScrollDirection::Vertical;
+    BOOL hasPDFBackground = _pdfPath && _pdfBackgroundView;
+
+    if ((isVerticalInfiniteScroll || hasPDFBackground) && _baseWidth > 0) {
+      CGFloat currentWidth = self.bounds.size.width;
+      if (currentWidth > 0) {
+        CGFloat initialZoom = currentWidth / _baseWidth;
+        _view.minimumZoomScale = 0.25 * initialZoom;
+        _view.maximumZoomScale = 4.0 * initialZoom;
+        [_view setZoomScale:initialZoom animated:NO];
+
+        // Update _lastBoundsWidth so layoutSubviews doesn't re-scale
+        _lastBoundsWidth = currentWidth;
+
+        if (_paperTemplateView) {
+          _paperTemplateView.zoomScale = initialZoom;
+        }
+      }
+    }
+
     // Scroll to appropriate position after loading drawing
     if (!CGRectIsEmpty(_view.drawing.bounds) &&
         !CGSizeEqualToSize(_view.drawing.bounds.size, CGSizeZero)) {
@@ -998,7 +1031,9 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
   PDFDocument* sourceDocument = _pdfBackgroundView.document;
   NSArray<NSNumber*>* pageYOffsets = _pdfBackgroundView.pageYOffsets;
   CGFloat pageWidth = _pdfBackgroundView.pageWidth;
-  CGFloat fitScale = _view.bounds.size.width / pageWidth;
+  // Use _baseWidth for calculating content coordinates since drawings are stored
+  // relative to _baseWidth, not the current view bounds width
+  CGFloat fitScale = _baseWidth / pageWidth;
 
   // Create a new PDF document
   PDFDocument* outputDocument = [[PDFDocument alloc] init];
@@ -1090,8 +1125,10 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
   CGRect drawingBounds = _view.drawing.bounds;
 
   if (CGRectIsEmpty(drawingBounds) || CGSizeEqualToSize(drawingBounds.size, CGSizeZero)) {
-    // No drawing - export the visible content area
-    exportRect = CGRectMake(0, 0, _view.bounds.size.width, _view.bounds.size.height);
+    // No drawing - export using base width to match drawing coordinate system
+    // Use _baseWidth instead of _view.bounds.size.width since drawings are stored relative to
+    // _baseWidth
+    exportRect = CGRectMake(0, 0, _baseWidth, _view.bounds.size.height / _view.zoomScale);
   } else {
     // Has drawing - include some padding around the drawing
     CGFloat padding = 50.0;
@@ -1176,17 +1213,18 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
   }
 
   PaperTemplateType templateType = _paperTemplateView.templateType;
-  CGFloat zoomScale = 1.0; // Use base zoom for export
 
   // Draw template pattern based on type
+  // Use the same base spacing values as PaperTemplateView (36.0 points)
+  // The drawing is exported in canvas coordinate space, so we use base scale (1.0)
   UIColor* patternColor = [UIColor colorWithRed:0.85 green:0.85 blue:0.9 alpha:1.0];
   [patternColor setFill];
   [patternColor setStroke];
 
   switch (templateType) {
     case PaperTemplateTypeLined: {
-      CGFloat lineHeight = 24.0 * zoomScale;
-      CGFloat lineThickness = 2.0 * zoomScale;
+      CGFloat lineHeight = 36.0;
+      CGFloat lineThickness = 2.0;
 
       CGFloat startY = floor(rect.origin.y / lineHeight) * lineHeight - rect.origin.y;
       for (CGFloat y = startY; y < rect.size.height; y += lineHeight) {
@@ -1196,8 +1234,8 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
       break;
     }
     case PaperTemplateTypeDotted: {
-      CGFloat dotSpacing = 24.0 * zoomScale;
-      CGFloat dotRadius = 2.0 * zoomScale;
+      CGFloat dotSpacing = 36.0;
+      CGFloat dotRadius = 2.0;
 
       CGFloat startX = floor(rect.origin.x / dotSpacing) * dotSpacing - rect.origin.x;
       CGFloat startY = floor(rect.origin.y / dotSpacing) * dotSpacing - rect.origin.y;
@@ -1212,8 +1250,8 @@ static inline PaperTemplateType toPaperTemplateType(RNPencilKitPaperTemplate tem
       break;
     }
     case PaperTemplateTypeGrid: {
-      CGFloat gridSpacing = 24.0 * zoomScale;
-      CGFloat lineThickness = 1.0 * zoomScale;
+      CGFloat gridSpacing = 36.0;
+      CGFloat lineThickness = 1.0;
 
       // Horizontal lines
       CGFloat startY = floor(rect.origin.y / gridSpacing) * gridSpacing - rect.origin.y;
